@@ -17,7 +17,6 @@
       </nav>
 
       <div class="top-bar__actions">
-        <span class="status"><span class="status__dot" aria-hidden="true"></span> Clínica aberta</span>
         <router-link class="profile-link" to="/profile" aria-label="Abrir perfil de Ana Martins">
           <span class="profile-link__avatar" aria-hidden="true">AM</span>
           <span class="profile-link__text">
@@ -39,7 +38,7 @@
   width: 100%;
   min-height: 76px;
   border-bottom: 1px solid var(--topbar-line);
-  background: rgba(250, 252, 248, 0.96);
+  background: #f3f5f1;
   box-shadow: 0 8px 24px rgba(24, 59, 58, 0.05);
 }
 
@@ -149,28 +148,10 @@
   gap: 40px;
 }
 
-.status {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--topbar-muted);
-  font-size: 0.66rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.status__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #7fa95c;
-  box-shadow: 0 0 0 4px #e6f0dd;
-}
-
 .profile-link {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   color: var(--topbar-ink);
 }
 
@@ -190,7 +171,7 @@
 .profile-link__text {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 8px;
   line-height: 1;
 }
 
