@@ -2,13 +2,13 @@ import {createRouter, createWebHistory} from 'vue-router'
 
 // Importação das páginas
 
-import Login from '../views/Login.vue'
-import Dashboard from '../views/Dashboard.vue'
-import Calendar from '../views/Calendar.vue'
-import Appointments from '../views/Appointments.vue'
-import Services from '../views/Services.vue'
-import Finances from '../views/Finances.vue'
-import Profile from '../views/Profile.vue'
+import Login from '../Views/Login.vue'
+import Dashboard from '../Views/Dashboard.vue'
+import Calendar from '../Views/Calendar.vue'
+import Appointments from '../Views/Appointments.vue'
+import Services from '../Views/Services.vue'
+import Finances from '../Views/Finances.vue'
+import Profile from '../Views/Profile.vue'
 
 // Definição das rotas
 
