@@ -1,5 +1,31 @@
-# Vue 3 + Vite
+# 🐾 Gestão da Clínica
 
-This template should help get you started developing with Vue 3 in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+Sistema web para apoiar a rotina de clínicas veterinárias, reunindo em um único ambiente informações sobre agenda, atendimentos, serviços, finanças e perfil da equipe.
 
-Learn more about IDE Support for Vue in the [Vue Docs Scaling up Guide](https://vuejs.org/guide/scaling-up/tooling.html#ide-support).
+## ✨ Sobre o projeto
+
+O **Gestão da Clínica** foi pensado para tornar a organização de uma clínica veterinária mais simples, visual e centralizada. A aplicação apresenta uma interface responsiva, com navegação clara e identidade visual inspirada no cuidado e no bem-estar animal.
+
+Neste momento, o projeto está em desenvolvimento como um protótipo de front-end. As telas e a navegação principal já estão estruturadas, enquanto a integração com o Supabase para persistência de dados e autenticação ainda faz parte da evolução planejada.
+
+## 📌 Funcionalidades
+
+- Tela inicial de login;
+- Dashboard para visão geral da clínica;
+- Agenda para acompanhamento da rotina;
+- Área de atendimentos;
+- Catálogo de serviços oferecidos;
+- Área financeira;
+- Perfil da administradora;
+- Navegação entre as áreas por rotas;
+- Layout responsivo para diferentes tamanhos de tela.
+
+## 🛠️ Tecnologias
+
+- [Vue 3](https://vuejs.org/) — construção da interface;
+- [Vue Router](https://router.vuejs.org/) — navegação entre telas;
+- [Vite](https://vite.dev/) — desenvolvimento e build;
+- [Supabase](https://supabase.com/) — banco de dados e serviços de backend planejados;
+- JavaScript;
+- CSS com escopo por componente;
+- Google Fonts — tipografia Montserrat Alternates.
