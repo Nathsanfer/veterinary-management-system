@@ -1,98 +1,11 @@
 <script setup>
-import { ref } from 'vue'
 import TopBar from '../components/TopBar.vue'
+import { catalogServices, loadError, loading } from '../stores/clinic'
 
-const services = [
-    {
-        id: 1,
-        icon: 'stethoscope',
-        name: 'Consulta clínica',
-        description: 'Avaliação completa para acompanhar a saúde e o bem-estar do seu pet.',
-        price: 'R$ 120,00',
-        unit: 'por atendimento',
-        tone: 'mint'
-    },
-    {
-        id: 2,
-        icon: 'bath',
-        name: 'Banho e tosa',
-        description: 'Higiene, cuidado e acabamento especial para deixar seu pet confortável.',
-        price: 'R$ 85,00',
-        unit: 'por atendimento',
-        tone: 'aqua'
-    },
-    {
-        id: 3,
-        icon: 'shield',
-        name: 'Vacinação',
-        description: 'Aplicação de vacinas com acompanhamento do histórico de imunização.',
-        price: 'R$ 95,00',
-        unit: 'por dose',
-        tone: 'lemon'
-    },
-    {
-        id: 4,
-        icon: 'house',
-        name: 'Hospedagem',
-        description: 'Acolhimento seguro e carinhoso para estadias curtas ou prolongadas.',
-        price: 'R$ 70,00',
-        unit: 'por diária',
-        tone: 'peach'
-    },
-    {
-        id: 5,
-        icon: 'home-visit',
-        name: 'Consulta domiciliar',
-        description: 'Atendimento veterinário no conforto da casa e na rotina do seu animal.',
-        price: 'R$ 180,00',
-        unit: 'por atendimento',
-        tone: 'lilac'
-    },
-    {
-        id: 6,
-        icon: 'flask',
-        name: 'Exames laboratoriais',
-        description: 'Análises clínicas para investigar sinais e acompanhar tratamentos.',
-        price: 'R$ 60,00',
-        unit: 'a partir de',
-        tone: 'blue'
-    },
-    {
-        id: 7,
-        icon: 'syringe',
-        name: 'Cirurgias',
-        description: 'Procedimentos cirúrgicos com acompanhamento pré e pós-operatório.',
-        price: 'R$ 350,00',
-        unit: 'a partir de',
-        tone: 'mint'
-    },
-    {
-        id: 8,
-        icon: 'paw',
-        name: 'Adestramento',
-        description: 'Treinamento comportamental para melhorar a convivência com seu pet.',
-        price: 'R$ 150,00',
-        unit: 'por sessão',
-        tone: 'aqua'
-    },
-    {
-        id: 9,
-        icon: 'heart',
-        name: 'Emergência 24h',
-        description: 'Atendimento imediato para situações críticas e urgentes.',
-        price: 'R$ 250,00',
-        unit: 'por atendimento',
-        tone: 'lemon'
-    }
-]
+const services = catalogServices
 
-const favoriteServices = ref([])
-
-function toggleFavorite(serviceId) {
-    favoriteServices.value = favoriteServices.value.includes(serviceId)
-        ? favoriteServices.value.filter((id) => id !== serviceId)
-        : [...favoriteServices.value, serviceId]
-}
+const formatPrice = (value) =>
+    value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 </script>
 
 <template>
@@ -108,6 +21,9 @@ function toggleFavorite(serviceId) {
                 </div>
                 <span class="service-count">{{ services.length }} serviços ativos</span>
             </header>
+
+            <p v-if="loadError" class="state-message state-message--error" role="alert">{{ loadError }}</p>
+            <p v-else-if="loading && !services.length" class="state-message">Carregando serviços...</p>
 
             <section class="services-grid" aria-label="Serviços oferecidos pela clínica">
                 <article v-for="service in services" :key="service.id" class="service-card">
@@ -131,7 +47,7 @@ function toggleFavorite(serviceId) {
                         <div class="service-card__footer">
                             <div>
                                 <span class="footer-label">Valor</span>
-                                <strong>{{ service.price }}</strong>
+                                <strong>{{ formatPrice(service.price) }}</strong>
                             </div>
                             <div class="footer-unit">
                                 <span class="footer-label">Unidade</span>
@@ -197,6 +113,17 @@ function toggleFavorite(serviceId) {
     font-size: 0.68rem;
     font-weight: 700;
     white-space: nowrap;
+}
+
+.state-message {
+    margin: 0 0 20px;
+    color: var(--muted, #728682);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.state-message--error {
+    color: #b9533d;
 }
 
 .services-grid {

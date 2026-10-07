@@ -1,3 +1,15 @@
+<script setup>
+import { useRouter } from 'vue-router'
+import { displayName, displayRole, initials, signOut } from '../stores/auth'
+
+const router = useRouter()
+
+async function logout() {
+  await signOut()
+  router.push('/')
+}
+</script>
+
 <template>
   <header class="top-bar">
     <div class="top-bar__inner">
@@ -17,13 +29,14 @@
       </nav>
 
       <div class="top-bar__actions">
-        <router-link class="profile-link" to="/profile" aria-label="Abrir perfil de Ana Martins">
-          <span class="profile-link__avatar" aria-hidden="true">AM</span>
+        <router-link class="profile-link" to="/profile" aria-label="Abrir perfil">
+          <span class="profile-link__avatar" aria-hidden="true">{{ initials }}</span>
           <span class="profile-link__text">
-            <strong>Ana Martins</strong>
-            <small>Administradora</small>
+            <strong>{{ displayName }}</strong>
+            <small>{{ displayRole }}</small>
           </span>
         </router-link>
+        <button class="logout-button" type="button" @click="logout">Sair</button>
       </div>
     </div>
   </header>
@@ -145,7 +158,7 @@
   justify-self: end;
   display: flex;
   align-items: center;
-  gap: 40px;
+  gap: 20px;
 }
 
 .profile-link {
@@ -177,6 +190,24 @@
 
 .profile-link__text strong {
   font-size: 0.7rem;
+}
+
+.logout-button {
+  border: 1px solid var(--topbar-line);
+  border-radius: 8px;
+  padding: 7px 13px;
+  color: var(--topbar-muted);
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  transition: color 180ms ease, border-color 180ms ease;
+}
+
+.logout-button:hover {
+  color: var(--topbar-ink);
+  border-color: #c3d7cf;
 }
 
 .profile-link__arrow {
