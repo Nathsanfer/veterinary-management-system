@@ -1,17 +1,39 @@
 <script setup>
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import TopBar from "../components/TopBar.vue";
+import {
+  TODAY,
+  addAppointment,
+  calendarEvents,
+  catalogServices,
+  completeAppointment,
+  loadError,
+} from "../stores/clinic";
 
-const currentDate = ref(new Date(2025, 4, 15));
+const currentDate = ref(new Date());
 const viewMode = ref("month");
 const isModalOpen = ref(false);
 const selectedDate = ref("");
+const selectedKey = ref("");
+const saving = ref(false);
+const saveError = ref("");
 const newAppointment = ref({
   pet: "",
   owner: "",
-  service: "Consulta clínica",
+  serviceId: null,
   time: "09:00",
 });
+
+// Pré-seleciona o primeiro serviço assim que o catálogo carregar
+watch(
+  catalogServices,
+  (list) => {
+    if (!newAppointment.value.serviceId) {
+      newAppointment.value.serviceId = list[0]?.id ?? null;
+    }
+  },
+  { immediate: true },
+);
 
 const monthNames = [
   "janeiro",
@@ -28,80 +50,8 @@ const monthNames = [
   "dezembro",
 ];
 const weekDays = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
-const monthEvents = [
-  {
-    date: "2025-05-02",
-    time: "09:00",
-    pet: "Luna",
-    owner: "Mariana Costa",
-    service: "Consulta clínica",
-    tone: "green",
-  },
-  {
-    date: "2025-05-06",
-    time: "10:30",
-    pet: "Thor",
-    owner: "Rafael Mendes",
-    service: "Vacinação",
-    tone: "yellow",
-  },
-  {
-    date: "2025-05-09",
-    time: "14:00",
-    pet: "Nina",
-    owner: "Beatriz Lima",
-    service: "Banho e tosa",
-    tone: "blue",
-  },
-  {
-    date: "2025-05-15",
-    time: "09:00",
-    pet: "Mel",
-    owner: "Carlos Oliveira",
-    service: "Retorno",
-    tone: "green",
-  },
-  {
-    date: "2025-05-15",
-    time: "11:30",
-    pet: "Bento",
-    owner: "Ana Souza",
-    service: "Consulta clínica",
-    tone: "purple",
-  },
-  {
-    date: "2025-05-17",
-    time: "15:00",
-    pet: "Zeca",
-    owner: "Lucas Alves",
-    service: "Exames",
-    tone: "blue",
-  },
-  {
-    date: "2025-05-21",
-    time: "08:30",
-    pet: "Amora",
-    owner: "Julia Reis",
-    service: "Consulta clínica",
-    tone: "green",
-  },
-  {
-    date: "2025-05-23",
-    time: "16:00",
-    pet: "Pipoca",
-    owner: "Fernanda Dias",
-    service: "Banho e tosa",
-    tone: "yellow",
-  },
-  {
-    date: "2025-05-27",
-    time: "10:00",
-    pet: "Max",
-    owner: "Pedro Nunes",
-    service: "Vacinação",
-    tone: "purple",
-  },
-];
+const monthEvents = calendarEvents;
+
 
 const dateKey = (date) => date.toISOString().slice(0, 10);
 const displayMonth = computed(
@@ -155,14 +105,14 @@ const weekDaysWithDates = computed(() => {
 });
 
 const visibleEvents = computed(() =>
-  monthEvents.filter((event) => {
+  monthEvents.value.filter((event) => {
     if (viewMode.value === "month") return true;
     return weekDaysWithDates.value.some((day) => day.key === event.date);
   }),
 );
 
-const eventForDate = (key) => monthEvents.filter((event) => event.date === key);
-const isToday = (date) => dateKey(date) === "2025-05-15";
+const eventForDate = (key) => monthEvents.value.filter((event) => event.date === key);
+const isToday = (date) => dateKey(date) === TODAY;
 const formatDate = (date) =>
   date.toLocaleDateString("pt-BR", { day: "numeric", month: "long" });
 
@@ -174,28 +124,47 @@ function movePeriod(amount) {
 }
 
 function goToday() {
-  currentDate.value = new Date(2025, 4, 15);
+  currentDate.value = new Date();
 }
 
 function openModal(date = currentDate.value) {
   selectedDate.value = formatDate(date);
+  selectedKey.value = dateKey(date);
   isModalOpen.value = true;
 }
 
-function createAppointment() {
-  isModalOpen.value = false;
-  newAppointment.value = {
-    pet: "",
-    owner: "",
-    service: "Consulta clínica",
-    time: "09:00",
-  };
+async function createAppointment() {
+  saveError.value = "";
+  saving.value = true;
+  try {
+    await addAppointment({ ...newAppointment.value, date: selectedKey.value });
+    isModalOpen.value = false;
+    newAppointment.value = {
+      pet: "",
+      owner: "",
+      serviceId: catalogServices.value[0]?.id ?? null,
+      time: "09:00",
+    };
+  } catch (error) {
+    saveError.value = error.message ?? "Não foi possível salvar o agendamento.";
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function finishAppointment(id) {
+  try {
+    await completeAppointment(id);
+  } catch (error) {
+    window.alert(error.message ?? "Não foi possível concluir o atendimento.");
+  }
 }
 </script>
 
 <template>
   <TopBar />
   <main class="calendar-page">
+    <p v-if="loadError" class="load-error" role="alert">{{ loadError }}</p>
     <section class="agenda-summary">
       <div class="summary-title">
         <div class="section-icon">✦</div>
@@ -222,6 +191,15 @@ function createAppointment() {
           </div>
           <time>{{ event.time }}</time
           ><span class="status-dot"></span>
+          <button
+            v-if="event.status === 'scheduled'"
+            class="finish-button"
+            type="button"
+            @click="finishAppointment(event.id)"
+          >
+            Concluir
+          </button>
+          <span v-else class="done-badge">Concluído</span>
         </article>
       </div>
     </section>
@@ -366,18 +344,26 @@ function createAppointment() {
       /></label>
       <div class="form-row">
         <label
-          >Serviço<select v-model="newAppointment.service">
-            <option>Consulta clínica</option>
-            <option>Vacinação</option>
-            <option>Banho e tosa</option>
-            <option>Exames</option>
+          >Serviço<select v-model="newAppointment.serviceId">
+            <option
+              v-for="service in catalogServices"
+              :key="service.id"
+              :value="service.id"
+            >
+              {{ service.name }}
+            </option>
           </select></label
         ><label
           >Horário<input v-model="newAppointment.time" type="time" required
         /></label>
       </div>
-      <button class="primary-button modal-submit" type="submit">
-        Salvar agendamento
+      <p v-if="saveError" class="modal-error" role="alert">{{ saveError }}</p>
+      <button
+        class="primary-button modal-submit"
+        type="submit"
+        :disabled="saving || !newAppointment.serviceId"
+      >
+        {{ saving ? "Salvando..." : "Salvar agendamento" }}
       </button>
     </form>
   </div>
@@ -438,6 +424,35 @@ h1 {
   transition:
     transform 0.2s,
     background 0.2s;
+}
+.load-error,
+.modal-error {
+  color: #b9533d;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+.finish-button {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 11px;
+  color: #31572c;
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+.finish-button:hover {
+  background: #eef3ed;
+}
+.done-badge {
+  color: #2f7d73;
+  font-size: 0.64rem;
+  font-weight: 800;
+}
+.primary-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 .primary-button:hover {
   background: #264a24;
