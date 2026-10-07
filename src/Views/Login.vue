@@ -1,3 +1,31 @@
+<script setup>
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { signIn } from '../stores/auth'
+
+const router = useRouter()
+const email = ref('')
+const password = ref('')
+const submitting = ref(false)
+const errorMessage = ref('')
+
+async function submit() {
+    errorMessage.value = ''
+    submitting.value = true
+    try {
+        await signIn(email.value.trim(), password.value)
+        router.push('/dashboard')
+    } catch (error) {
+        errorMessage.value =
+            error.message === 'Invalid login credentials'
+                ? 'E-mail ou senha incorretos.'
+                : 'Não foi possível entrar. Tente novamente.'
+    } finally {
+        submitting.value = false
+    }
+}
+</script>
+
 <template>
     <main class="login-page">
         <div class="login-shell">
@@ -11,16 +39,16 @@
             </section>
 
             <section class="login-content" aria-label="Acesso à conta">
-                <form class="login-card" @submit.prevent="$router.push('/dashboard')">
+                <form class="login-card" @submit.prevent="submit">
                 <p class="eyebrow">ACESSO À CLÍNICA</p>
                 <h2>Bem-vindo de volta!</h2>
                 <p class="card-introduction">Entre para acompanhar a agenda, os atendimentos e os resultados da sua equipe.</p>
 
                 <label for="email">EMAIL</label>
-                <input id="email" name="email" type="email" autocomplete="email" placeholder="seu@email.com" />
+                <input id="email" v-model="email" name="email" type="email" autocomplete="email" placeholder="seu@email.com" required />
 
                 <label for="password">SENHA</label>
-                <input id="password" name="password" type="password" autocomplete="current-password" placeholder="Digite sua senha" />
+                <input id="password" v-model="password" name="password" type="password" autocomplete="current-password" placeholder="Digite sua senha" required />
 
                 <div class="login-options">
                     <label class="remember-option" for="remember">
@@ -30,8 +58,10 @@
                     <a class="forgot-link" href="#">Esqueci a senha</a>
                 </div>
 
-                <button type="submit">
-                    Acessar sistema
+                <p v-if="errorMessage" class="login-error" role="alert">{{ errorMessage }}</p>
+
+                <button type="submit" :disabled="submitting">
+                    {{ submitting ? 'Entrando...' : 'Acessar sistema' }}
                     <span aria-hidden="true">→</span>
                 </button>
 
@@ -393,4 +423,11 @@
         padding-left: 38px;
     }
 }
+.login-error {
+    margin: 0 0 12px;
+    color: #b9533d;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
 </style>
