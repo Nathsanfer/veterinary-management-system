@@ -1,4 +1,5 @@
-import {createRouter, createWebHistory} from 'vue-router'
+﻿import {createRouter, createWebHistory} from 'vue-router'
+import { initAuth, session } from '../stores/auth'
 
 // Importação das páginas
 
@@ -25,6 +26,13 @@ const routes = [
 const router = createRouter({
     history: createWebHistory(),
     routes
+})
+
+// Proteção de rotas: só usuários logados acessam as telas internas
+router.beforeEach(async (to) => {
+    await initAuth()
+    if (!session.value && to.path !== '/') return '/'
+    if (session.value && to.path === '/') return '/dashboard'
 })
 
 export default router
