@@ -165,44 +165,6 @@ async function finishAppointment(id) {
   <TopBar />
   <main class="calendar-page">
     <p v-if="loadError" class="load-error" role="alert">{{ loadError }}</p>
-    <section class="agenda-summary">
-      <div class="summary-title">
-        <div class="section-icon">✦</div>
-        <div>
-          <h2>Próximos agendamentos</h2>
-          <p>Seus compromissos mais recentes</p>
-        </div>
-      </div>
-      <div class="appointment-list">
-        <article
-          v-for="event in visibleEvents.slice(0, 4)"
-          :key="event.date + event.time"
-          class="appointment-item"
-        >
-          <div class="appointment-date">
-            <strong>{{ event.date.slice(8) }}</strong
-            ><span>{{
-              monthNames[Number(event.date.slice(5, 7)) - 1].slice(0, 3)
-            }}</span>
-          </div>
-          <div class="appointment-info">
-            <strong>{{ event.pet }}</strong
-            ><span>{{ event.service }} · {{ event.owner }}</span>
-          </div>
-          <time>{{ event.time }}</time
-          ><span class="status-dot"></span>
-          <button
-            v-if="event.status === 'scheduled'"
-            class="finish-button"
-            type="button"
-            @click="finishAppointment(event.id)"
-          >
-            Concluir
-          </button>
-          <span v-else class="done-badge">Concluído</span>
-        </article>
-      </div>
-    </section>
 
     <section class="calendar-card">
       <div class="calendar-toolbar">
@@ -377,7 +339,7 @@ async function finishAppointment(id) {
   --cream: #fffefa;
   width: min(100% - 48px, 1380px);
   margin: 0 auto;
-  padding: 48px 0 64px;
+  padding: 32px 0 64px;
   color: var(--ink);
 }
 .page-heading {

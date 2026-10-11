@@ -354,7 +354,7 @@ onMounted(() => {
 .services-content {
   width: min(100% - 48px, 1380px);
   margin: 0 auto;
-  padding: 48px 0 64px;
+  padding: 32px 0 64px;
 }
 
 .services-heading {

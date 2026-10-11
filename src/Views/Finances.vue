@@ -356,9 +356,9 @@ async function payTransaction(item) {
 }
 
 .finances-content {
-    width: min(100% - 48px, 1220px);
+    width: min(100% - 48px, 1380px);
     margin: 0 auto;
-    padding: 32px 0 48px;
+    padding: 32px 0 64px;
 }
 
 .finances-heading {
