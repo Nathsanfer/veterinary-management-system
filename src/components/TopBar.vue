@@ -1,8 +1,16 @@
 <script setup>
 import { useRouter } from 'vue-router'
-import { displayName, displayRole, initials, signOut } from '../stores/auth'
+import { canAccess, displayName, displayRole, initials, signOut } from '../stores/auth'
 
 const router = useRouter()
+
+const navLinks = [
+  { to: '/dashboard', label: 'Visão geral' },
+  { to: '/calendar', label: 'Agenda' },
+  { to: '/appointments', label: 'Atendimentos' },
+  { to: '/services', label: 'Serviços' },
+  { to: '/finances', label: 'Finanças' }
+]
 
 async function logout() {
   await signOut()
@@ -21,11 +29,9 @@ async function logout() {
       </router-link>
 
       <nav class="main-nav" aria-label="Navegação principal">
-        <router-link to="/dashboard">Visão geral</router-link>
-        <router-link to="/calendar">Agenda</router-link>
-        <router-link to="/appointments">Atendimentos</router-link>
-        <router-link to="/services">Serviços</router-link>
-        <router-link to="/finances">Finanças</router-link>
+        <template v-for="link in navLinks" :key="link.to">
+          <router-link v-if="canAccess(link.to)" :to="link.to">{{ link.label }}</router-link>
+        </template>
       </nav>
 
       <div class="top-bar__actions">

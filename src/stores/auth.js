@@ -14,6 +14,29 @@ export const cargoLabels = {
 export const displayName = computed(() => profile.value?.nome ?? session.value?.user?.email ?? '')
 export const displayRole = computed(() => cargoLabels[profile.value?.cargo] ?? '')
 export const isAdmin = computed(() => profile.value?.cargo === 'admin' && profile.value?.ativo !== false)
+export const isVeterinario = computed(() => profile.value?.cargo === 'veterinario')
+export const isRecepcao = computed(() => profile.value?.cargo === 'recepcao')
+
+/* ------------------------- Regras de acesso ------------------------- */
+
+// Telas liberadas por cargo ('*' = todas). O perfil é sempre acessível.
+const routesByCargo = {
+    admin: ['*'],
+    recepcao: ['/dashboard', '/appointments', '/calendar'],
+    veterinario: ['/dashboard', '/appointments', '/calendar']
+}
+const ALWAYS_ALLOWED = ['/dashboard', '/profile']
+
+/** Indica se o usuário logado pode abrir a rota informada. */
+export function canAccess(path) {
+    if (ALWAYS_ALLOWED.includes(path)) return true
+    const allowed = routesByCargo[profile.value?.cargo] ?? []
+    return allowed.includes('*') || allowed.includes(path)
+}
+
+// Ações na tela de Atendimentos: veterinário apenas consulta/atende
+export const canCreateAppointment = computed(() => isAdmin.value || isRecepcao.value)
+export const canDeleteAppointment = computed(() => isAdmin.value || isRecepcao.value)
 export const initials = computed(() =>
     displayName.value
         .split(' ')
@@ -63,8 +86,10 @@ export function initAuth() {
 }
 
 export async function signIn(email, password) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) throw error
+    session.value = data.session
+    await loadProfile()
 }
 
 export async function signOut() {
