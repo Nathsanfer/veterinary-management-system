@@ -1,5 +1,5 @@
-﻿import {createRouter, createWebHistory} from 'vue-router'
-import { initAuth, session } from '../stores/auth'
+import {createRouter, createWebHistory} from 'vue-router'
+import { canAccess, initAuth, session } from '../stores/auth'
 
 // Importação das páginas
 
@@ -33,6 +33,8 @@ router.beforeEach(async (to) => {
     await initAuth()
     if (!session.value && to.path !== '/') return '/'
     if (session.value && to.path === '/') return '/dashboard'
+    // Proteção por cargo: telas não liberadas voltam para o dashboard
+    if (session.value && !canAccess(to.path)) return '/dashboard'
 })
 
 export default router
