@@ -112,8 +112,33 @@ const form = ref(blankForm())
 const saving = ref(false)
 const saveError = ref('')
 
+/* Máscara de moeda: os dígitos entram pelos centavos (estilo maquininha).
+   Ex.: digitar 1, 2, 5, 0 -> 0,01 -> 0,12 -> 1,25 -> 12,50 */
+const MAX_CENTS = 99999999 // R$ 999.999,99
+const amountCents = computed(() => Number(String(form.value.amount).replace(/\D/g, '')) || 0)
+const formatCents = (cents) =>
+    (cents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+function onAmountInput(event) {
+    const digits = event.target.value.replace(/\D/g, '').replace(/^0+/, '')
+    const cents = Math.min(Number(digits) || 0, MAX_CENTS)
+    form.value.amount = cents ? formatCents(cents) : ''
+    event.target.value = form.value.amount
+}
+
+function onAmountKeydown(event) {
+    // Permite apenas dígitos e teclas de controle/navegação
+    const allowed = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter']
+    if (event.ctrlKey || event.metaKey || allowed.includes(event.key)) return
+    if (!/^\d$/.test(event.key)) event.preventDefault()
+}
+
 async function saveTransaction() {
     saveError.value = ''
+    if (amountCents.value <= 0) {
+        saveError.value = 'Informe um valor maior que zero.'
+        return
+    }
     saving.value = true
     try {
         await addManualTransaction({
@@ -122,7 +147,7 @@ async function saveTransaction() {
             category: form.value.category,
             method: form.value.method,
             date: form.value.date,
-            amount: Number(form.value.amount)
+            amount: amountCents.value / 100
         })
         isModalOpen.value = false
         form.value = blankForm()
@@ -303,7 +328,17 @@ async function payTransaction(item) {
                 <div class="form-row">
                     <label>
                         Valor (R$)
-                        <input v-model="form.amount" type="number" min="0" step="0.01" required placeholder="0,00" />
+                        <input
+                            :value="form.amount"
+                            type="text"
+                            inputmode="numeric"
+                            maxlength="10"
+                            autocomplete="off"
+                            required
+                            placeholder="0,00"
+                            @keydown="onAmountKeydown"
+                            @input="onAmountInput"
+                        />
                     </label>
                     <label>
                         Data
