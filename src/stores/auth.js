@@ -5,7 +5,7 @@ export const session = ref(null)
 export const profile = ref(null)
 export const authReady = ref(false)
 
-const cargoLabels = {
+export const cargoLabels = {
     admin: 'Administração',
     recepcao: 'Recepção',
     veterinario: 'Veterinário(a)'
@@ -13,6 +13,7 @@ const cargoLabels = {
 
 export const displayName = computed(() => profile.value?.nome ?? session.value?.user?.email ?? '')
 export const displayRole = computed(() => cargoLabels[profile.value?.cargo] ?? '')
+export const isAdmin = computed(() => profile.value?.cargo === 'admin' && profile.value?.ativo !== false)
 export const initials = computed(() =>
     displayName.value
         .split(' ')
@@ -22,17 +23,22 @@ export const initials = computed(() =>
         .join('')
 )
 
-async function loadProfile() {
+export async function loadProfile() {
     if (!session.value) {
         profile.value = null
         return
     }
     const { data } = await supabase
         .from('perfis')
-        .select('nome, cargo')
+        .select('id, nome, cargo, email, ativo, veterinario_id')
         .eq('id', session.value.user.id)
         .maybeSingle()
     profile.value = data
+
+    // conta desativada por um administrador: encerra a sessão
+    if (data && data.ativo === false) {
+        await supabase.auth.signOut()
+    }
 }
 
 let initPromise = null
@@ -64,4 +70,3 @@ export async function signIn(email, password) {
 export async function signOut() {
     await supabase.auth.signOut()
 }
-
