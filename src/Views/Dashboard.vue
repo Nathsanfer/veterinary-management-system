@@ -249,7 +249,7 @@ const formattedDate = computed(() =>
   --muted: #6c8580;
   --line: #e3ebe3;
   --accent: #31572c;
-  width: min(100% - 48px, 1280px);
+  width: min(100% - 48px, 1380px);
   margin: 0 auto;
   padding: 38px 0 64px;
   color: var(--ink);
