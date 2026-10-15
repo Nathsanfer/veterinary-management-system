@@ -130,7 +130,19 @@ function goToday() {
 function openModal(date = currentDate.value) {
   selectedDate.value = formatDate(date);
   selectedKey.value = dateKey(date);
+  isDayModalOpen.value = false;
   isModalOpen.value = true;
+}
+
+// Agenda do dia: mostrada quando o dia clicado já possui atendimentos
+const isDayModalOpen = ref(false);
+const selectedDayEvents = computed(() => eventForDate(selectedKey.value));
+
+function handleDayClick(date) {
+  if (eventForDate(dateKey(date)).length === 0) return openModal(date);
+  selectedDate.value = formatDate(date);
+  selectedKey.value = dateKey(date);
+  isDayModalOpen.value = true;
 }
 
 async function createAppointment() {
@@ -219,7 +231,7 @@ async function finishAppointment(id) {
           :key="day.key"
           class="month-day"
           :class="{ outside: day.outside, today: isToday(day.date) }"
-          @click="openModal(day.date)"
+          @click="handleDayClick(day.date)"
         >
           <span class="day-number">{{ day.day }}</span>
           <span
@@ -264,7 +276,7 @@ async function finishAppointment(id) {
               :key="event.time + event.pet"
               class="week-event"
               :class="event.tone"
-              @click.stop="openModal(day.date)"
+              @click.stop="handleDayClick(day.date)"
             >
               <b>{{ event.time }}</b
               ><span>{{ event.pet }} · {{ event.service }}</span>
@@ -274,6 +286,56 @@ async function finishAppointment(id) {
       </div>
     </section>
   </main>
+
+  <div
+    v-if="isDayModalOpen"
+    class="modal-backdrop"
+    @click.self="isDayModalOpen = false"
+  >
+    <div class="modal">
+      <button
+        class="modal-close"
+        type="button"
+        aria-label="Fechar"
+        @click="isDayModalOpen = false"
+      >
+        ×
+      </button>
+      <p class="eyebrow">Agenda do dia</p>
+      <h2>Atendimentos</h2>
+      <p class="modal-date">{{ selectedDate }}</p>
+      <ul class="day-schedule">
+        <li
+          v-for="event in selectedDayEvents"
+          :key="event.id ?? event.time + event.pet"
+          class="day-schedule-item"
+          :class="event.tone"
+        >
+          <time>{{ event.time }}</time>
+          <div class="appointment-info">
+            <strong>{{ event.pet }}</strong>
+            <span>{{ event.service }}<template v-if="event.owner"> · {{ event.owner }}</template></span>
+          </div>
+          <span v-if="event.status === 'completed' || event.status === 'done'" class="done-badge">Concluído</span>
+          <button
+            v-else-if="event.id"
+            class="finish-button"
+            type="button"
+            @click="finishAppointment(event.id)"
+          >
+            Concluir
+          </button>
+        </li>
+      </ul>
+      <button
+        class="primary-button modal-submit"
+        type="button"
+        @click="openModal(new Date(selectedKey + 'T12:00:00'))"
+      >
+        <span class="plus">+</span> Novo agendamento neste dia
+      </button>
+    </div>
+  </div>
 
   <div
     v-if="isModalOpen"
@@ -768,6 +830,43 @@ time {
   height: 7px;
   border-radius: 50%;
   background: #8aae61;
+}
+.day-schedule {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  margin: 0 0 20px;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.day-schedule-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid #6d9a59;
+  border-radius: 8px;
+  background: #e5f0df;
+}
+.day-schedule-item.yellow {
+  border-color: #d2a830;
+  background: #fcf0c9;
+}
+.day-schedule-item.blue {
+  border-color: #5c9db1;
+  background: #dceef3;
+}
+.day-schedule-item.purple {
+  border-color: #ad7ab8;
+  background: #eee1f1;
+}
+.day-schedule-item time {
+  min-width: 40px;
+  color: #183b3a;
+  font-size: 0.72rem;
+  font-weight: 800;
 }
 .modal-backdrop {
   position: fixed;
