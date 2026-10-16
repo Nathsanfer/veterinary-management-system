@@ -217,10 +217,6 @@ async function finishAppointment(id) {
               Semana
             </button>
           </div>
-          <button class="primary-button" type="button" @click="openModal()">
-            <span class="plus">+</span>
-            Novo agendamento
-          </button>
         </div>
       </div>
 
