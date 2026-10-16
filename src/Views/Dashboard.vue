@@ -87,7 +87,7 @@ const formattedDate = computed(() =>
           <span class="date-capitalized">{{ formattedDate }}</span>.
         </p>
       </div>
-      <router-link class="primary-action" to="/calendar">
+      <router-link class="primary-action" to="/appointments">
         <span aria-hidden="true">+</span>
         Novo agendamento
       </router-link>
