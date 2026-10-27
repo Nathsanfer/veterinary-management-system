@@ -2,10 +2,14 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { signIn } from '../stores/auth'
+import { resolvedTheme, toggleTheme } from '../stores/theme'
+import { notify } from '../stores/toast'
 
 const router = useRouter()
 const email = ref('')
 const password = ref('')
+const showPassword = ref(false)
+const remember = ref(true)
 const submitting = ref(false)
 const errorMessage = ref('')
 
@@ -14,6 +18,7 @@ async function submit() {
     submitting.value = true
     try {
         await signIn(email.value.trim(), password.value)
+        notify('Login realizado. Bem-vindo de volta!')
         router.push('/dashboard')
     } catch (error) {
         errorMessage.value =
@@ -27,44 +32,113 @@ async function submit() {
 </script>
 
 <template>
-    <main class="login-page">
-        <div class="login-shell">
-            <section class="welcome-panel" aria-label="Sobre o VetFlow">
+    <main class="login">
+        <button
+            class="login__theme icon-btn"
+            type="button"
+            :aria-label="resolvedTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'"
+            @click="toggleTheme"
+        >
+            <svg v-if="resolvedTheme === 'dark'" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+            </svg>
+            <svg v-else viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
+                <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z" />
+            </svg>
+        </button>
 
-                <p class="panel-kicker">GESTÃO VETERINÁRIA, SEM COMPLICAÇÃO</p>
-                <h1>Sua clínica, organizada.</h1>
-                <p class="panel-description">Organize sua agenda, seus atendimentos e o faturamento com mais clareza.</p>
-                <div class="panel-rule" aria-hidden="true"></div>
-                <p class="panel-note">Do tutor ao atendimento finalizado, acompanhe cada etapa da operação.</p>
-            </section>
+        <div class="login__shell">
+            <section class="login__brand" aria-label="Sobre o VetFlow">
+                <div class="login__orb login__orb--one" aria-hidden="true"></div>
+                <div class="login__orb login__orb--two" aria-hidden="true"></div>
 
-            <section class="login-content" aria-label="Acesso à conta">
-                <form class="login-card" @submit.prevent="submit">
-                <p class="eyebrow">ACESSO À CLÍNICA</p>
-                <h2>Bem-vindo de volta!</h2>
-                <p class="card-introduction">Entre para acompanhar a agenda, os atendimentos e os resultados da sua equipe.</p>
-
-                <label for="email">EMAIL</label>
-                <input id="email" v-model="email" name="email" type="email" autocomplete="email" placeholder="seu@email.com" required />
-
-                <label for="password">SENHA</label>
-                <input id="password" v-model="password" name="password" type="password" autocomplete="current-password" placeholder="Digite sua senha" required />
-
-                <div class="login-options">
-                    <label class="remember-option" for="remember">
-                        <input id="remember" name="remember" type="checkbox" />
-                        <span>Lembre de mim</span>
-                    </label>
-                    <a class="forgot-link" href="#">Esqueci a senha</a>
+                <div class="login__brand-top">
+                    <span class="login__mark" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                            <ellipse cx="6.5" cy="9" rx="2" ry="2.6" />
+                            <ellipse cx="10.5" cy="5.4" rx="2" ry="2.6" />
+                            <ellipse cx="14.5" cy="5.4" rx="2" ry="2.6" />
+                            <ellipse cx="18.5" cy="9" rx="2" ry="2.6" />
+                            <path d="M12 11.2c-2.9 0-5.6 3.6-5.6 6.2 0 1.9 1.5 2.8 3.1 2.8 1.1 0 1.7-.5 2.5-.5s1.4.5 2.5.5c1.6 0 3.1-.9 3.1-2.8 0-2.6-2.7-6.2-5.6-6.2z" />
+                        </svg>
+                    </span>
+                    <strong>VetFlow</strong>
                 </div>
 
-                <p v-if="errorMessage" class="login-error" role="alert">{{ errorMessage }}</p>
+                <div class="login__brand-copy">
+                    <p class="login__kicker">GESTÃO VETERINÁRIA, SEM COMPLICAÇÃO</p>
+                    <h1>Sua clínica, organizada.</h1>
+                    <p>Organize sua agenda, seus atendimentos e o faturamento com mais clareza.</p>
+                </div>
 
-                <button type="submit" :disabled="submitting">
-                    {{ submitting ? 'Entrando...' : 'Acessar sistema' }}
-                    <span aria-hidden="true">→</span>
-                </button>
+                <ul class="login__highlights">
+                    <li><span>✳</span>Agenda por veterinário</li>
+                    <li><span>✳</span>Atendimento do tutor à conclusão</li>
+                    <li><span>✳</span>Financeiro em tempo real</li>
+                </ul>
+            </section>
 
+            <section class="login__form-side">
+                <form class="login__form" @submit.prevent="submit">
+                    <p class="eyebrow">ACESSO À CLÍNICA</p>
+                    <h2>Bem-vindo de volta!</h2>
+                    <p class="login__intro">Entre para acompanhar a agenda, os atendimentos e os resultados da equipe.</p>
+
+                    <label class="field" for="email">
+                        E-mail
+                        <input
+                            id="email"
+                            v-model="email"
+                            class="input"
+                            name="email"
+                            type="email"
+                            autocomplete="email"
+                            placeholder="seu@email.com"
+                            required
+                        />
+                    </label>
+
+                    <label class="field" for="password">
+                        Senha
+                        <span class="password-field">
+                            <input
+                                id="password"
+                                v-model="password"
+                                class="input"
+                                name="password"
+                                :type="showPassword ? 'text' : 'password'"
+                                autocomplete="current-password"
+                                placeholder="Digite sua senha"
+                                required
+                            />
+                            <button
+                                class="password-toggle"
+                                type="button"
+                                :aria-label="showPassword ? 'Ocultar senha' : 'Mostrar senha'"
+                                @click="showPassword = !showPassword"
+                            >
+                                {{ showPassword ? 'Ocultar' : 'Mostrar' }}
+                            </button>
+                        </span>
+                    </label>
+
+                    <div class="login__options">
+                        <label class="remember">
+                            <input v-model="remember" type="checkbox" name="remember" />
+                            <span class="remember__box" aria-hidden="true"></span>
+                            Lembrar de mim
+                        </label>
+                        <a class="login__forgot" href="#">Esqueci a senha</a>
+                    </div>
+
+                    <p v-if="errorMessage" class="login__error" role="alert">{{ errorMessage }}</p>
+
+                    <button class="btn btn--primary btn--block login__submit" type="submit" :disabled="submitting">
+                        <span v-if="submitting" class="spinner" aria-hidden="true"></span>
+                        {{ submitting ? 'Entrando...' : 'Acessar sistema' }}
+                        <span v-if="!submitting" aria-hidden="true">→</span>
+                    </button>
                 </form>
             </section>
         </div>
@@ -72,362 +146,356 @@ async function submit() {
 </template>
 
 <style scoped>
-:global(*) {
-    box-sizing: border-box;
-}
-
-:global(body) {
-    margin: 0;
-}
-
-.login-page {
-    min-height: 100vh;
-    padding: 30px;
-    overflow: hidden;
-    color: var(--ink);
-    background: #f1f3ed;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.login-shell {
-    width: min(100%, 1080px);
-    height: 550px;
-    overflow: hidden;
-    display: grid;
-    grid-template-columns: minmax(300px, 0.92fr) minmax(420px, 1.08fr);
-    border: 1px solid rgba(40, 75, 80, 0.1);
-    border-radius: 24px;
-    background: #fff;
-    box-shadow: 0 24px 70px rgba(40, 75, 80, 0.13);
-}
-
-.back-link,
-.forgot-link,
-.register-prompt a {
-    color: #557174;
-    text-decoration: none;
-    transition: color 180ms ease;
-}
-
-.back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    color: rgba(247, 248, 243, 0.72);
-    font-size: 0.69rem;
-}
-
-.back-link span {
-    font-size: 1.1rem;
-    transition: transform 180ms ease;
-}
-
-.back-link:hover span {
-    transform: translateX(-3px);
-}
-
-.back-link:hover,
-.forgot-link:hover,
-.register-prompt a:hover {
-    color: var(--ink);
-}
-
-.back-link:hover {
-    color: #fff;
-}
-
-.welcome-panel {
+.login {
     position: relative;
-    min-height: 660px;
-    padding: 124px 56px 52px;
-    overflow: hidden;
-    color: #95b991;
-    background: #31572C;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-}
-
-.welcome-panel::before,
-.welcome-panel::after {
-    position: absolute;
-    content: '';
-    border: 1px solid rgba(214, 230, 213, 0.16);
-    border-radius: 50%;
-}
-
-.welcome-panel::before {
-    width: 380px;
-    height: 380px;
-    right: -170px;
-    top: -110px;
-}
-
-.welcome-panel::after {
-    width: 540px;
-    height: 540px;
-    right: -260px;
-    top: -190px;
-}
-
-.brand-mark {
-    width: 42px;
-    height: 42px;
-    margin: 0 0 28px;
+    min-height: 100vh;
     display: grid;
     place-items: center;
-    border-radius: 12px;
-    color: var(--accent);
-    background: #dbe9dc;
-    box-shadow: 0 8px 18px rgba(9, 39, 43, 0.18);
-    font-size: 1.2rem;
-    font-weight: 800;
+    padding: 28px;
+    background:
+        radial-gradient(900px 500px at 10% -10%, var(--accent-soft), transparent 60%),
+        var(--bg);
 }
 
-.panel-kicker {
-    margin-top: -10rem;
-    color: #accba7;
-    font-size: 0.61rem;
-    font-weight: 800;
-    letter-spacing: 0.17em;
+.login__theme {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 2;
 }
 
-.welcome-panel h1 {
-    max-width: 330px;
-    margin: 0;
-    color: #f7f8f3;
-    font-size: clamp(2.7rem, 5vw, 4.35rem);
-    font-weight: 800;
-    letter-spacing: -0.055em;
-    line-height: 0.98;
+.login__shell {
+    width: min(100%, 1040px);
+    min-height: 580px;
+    display: grid;
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 26px;
+    background: var(--surface);
+    box-shadow: var(--shadow-lg);
+    animation: rise 0.7s var(--ease) both;
 }
 
-.panel-description {
-    max-width: 280px;
-    margin: 24px 0 0;
-    color: rgba(247, 248, 243, 0.75);
-    font-size: 0.91rem;
-    line-height: 1.7;
+/* Painel de marca: verde escuro nos dois temas */
+
+.login__brand {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 40px;
+    padding: 40px 44px;
+    overflow: hidden;
+    color: #e7f0de;
+    background: linear-gradient(150deg, #3a6532 0%, #26461f 70%, #1d3819 100%);
 }
 
-.panel-rule {
-    width: 46px;
-    height: 2px;
-    margin: 20px 0 20px;
-    background: #a6c7ba;
+.login__orb {
+    position: absolute;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(170, 214, 140, 0.28), transparent 65%);
+    pointer-events: none;
+    animation: drift 14s ease-in-out infinite alternate;
 }
 
-.panel-note {
-    max-width: 245px;
-    margin: 0;
-    color: rgba(247, 248, 243, 0.52);
-    font-size: 0.7rem;
-    line-height: 1.7;
+.login__orb--one {
+    top: -90px;
+    right: -70px;
+    width: 280px;
+    height: 280px;
 }
 
-.login-content {
-    padding: 72px clamp(34px, 7vw, 88px);
+.login__orb--two {
+    bottom: -120px;
+    left: -60px;
+    width: 300px;
+    height: 300px;
+    animation-delay: -6s;
+}
+
+@keyframes drift {
+    to {
+        transform: translate(18px, -14px) scale(1.06);
+    }
+}
+
+.login__brand-top {
+    position: relative;
     display: flex;
     align-items: center;
-    margin-top: -5rem;
+    gap: 11px;
+    font-size: 1rem;
+    letter-spacing: -0.02em;
 }
 
-.login-card {
-    width: 100%;
-    max-width: 410px;
+.login__mark {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px 12px 12px 4px;
+    color: #26461f;
+    background: #e7f0de;
 }
 
-.eyebrow {
-    margin: 0 0 10px;
-    color: #accba7;
-    font-size: 0.59rem;
+.login__brand-copy {
+    position: relative;
+}
+
+.login__kicker {
+    margin: 0 0 14px;
+    color: #b4d99a;
+    font-size: 0.6rem;
     font-weight: 800;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.16em;
 }
 
-.login-card h2 {
+.login__brand h1 {
+    margin: 0 0 14px;
+    color: #fff;
+    font-size: clamp(1.9rem, 3.2vw, 2.6rem);
+    font-weight: 700;
+    line-height: 1.12;
+    letter-spacing: -0.05em;
+}
+
+.login__brand-copy p:last-child {
+    max-width: 330px;
     margin: 0;
-    font-size: 1.55rem;
-    font-weight: 650;
+    color: #cfe2c2;
+    font-size: 0.8rem;
+    line-height: 1.7;
 }
 
-.card-introduction {
-    margin: 10px 0 28px;
+.login__highlights {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.login__highlights li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #e1edd6;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.login__highlights span {
+    color: #b4d99a;
+    font-size: 0.8rem;
+}
+
+/* Formulário */
+
+.login__form-side {
+    display: grid;
+    place-items: center;
+    padding: 40px 44px;
+}
+
+.login__form {
+    width: 100%;
+    max-width: 360px;
+}
+
+@keyframes shake {
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+    20% {
+        transform: translateX(-7px);
+    }
+    40% {
+        transform: translateX(6px);
+    }
+    60% {
+        transform: translateX(-4px);
+    }
+    80% {
+        transform: translateX(2px);
+    }
+}
+
+.login__form h2 {
+    margin: 0 0 10px;
+    color: var(--ink);
+    font-size: 1.7rem;
+    font-weight: 700;
+    letter-spacing: -0.05em;
+}
+
+.login__intro {
+    margin: 0 0 28px;
     color: var(--muted);
-    font-size: 0.85rem;
+    font-size: 0.76rem;
     line-height: 1.6;
 }
 
-.login-card label {
+.login__form .field {
+    margin-bottom: 18px;
+}
+
+.password-field {
+    position: relative;
     display: block;
-    margin-bottom: 7px;
-    color: #132A13;
-    font-size: 0.68rem;
-    font-weight: 800;
 }
 
-.login-card input[type='email'],
-.login-card input[type='password'] {
-    width: 100%;
-    height: 46px;
-    margin-bottom: 20px;
-    padding: 0 13px;
-    border: 1px solid #d4dfda;
+.password-field .input {
+    padding-right: 84px;
+}
+
+.password-toggle {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    padding: 6px 10px;
+    border: 0;
     border-radius: 8px;
-    outline: none;
-    color: #132A13;
-    background: #fbfcf9;
-    font: inherit;
-    font-size: 0.85rem;
-    transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
-    box-sizing: border-box;
+    color: var(--accent-soft-ink);
+    background: transparent;
+    font-size: 0.64rem;
+    font-weight: 800;
+    transition: background-color 0.2s;
 }
 
-.login-card input::placeholder {
-    color: #9aa8a5;
+.password-toggle:hover {
+    background: var(--accent-soft);
 }
 
-.login-card input[type='email']:focus,
-.login-card input[type='password']:focus {
-    border-color: #31572C;
-    background: #fff;
-    box-shadow: 0 0 0 3px rgba(102, 139, 99, 0.16);
-}
-
-.login-options {
+.login__options {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-top: -3px;
+    margin: 4px 0 24px;
 }
 
-.login-card .remember-option {
-    display: flex;
+.remember {
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    margin: 0;
-    color: var(--muted);
-    font-size: 0.72rem;
-    font-weight: 500;
+    gap: 9px;
+    color: var(--ink-2);
+    font-size: 0.7rem;
+    font-weight: 600;
     cursor: pointer;
 }
 
-.remember-option input {
-    width: 14px;
-    height: 14px;
-    margin: 0;
-    accent-color: #31572C;
+.remember input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
 }
 
-.forgot-link {
+.remember__box {
+    display: grid;
+    place-items: center;
+    width: 17px;
+    height: 17px;
+    border: 1.5px solid var(--line-strong);
+    border-radius: 5px;
+    transition: background-color 0.2s, border-color 0.2s;
+}
+
+.remember input:checked + .remember__box {
+    border-color: var(--accent);
+    background: var(--accent);
+}
+
+.remember input:checked + .remember__box::after {
+    width: 5px;
+    height: 9px;
+    margin-top: -2px;
+    border: solid var(--accent-ink);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+    content: '';
+}
+
+.remember input:focus-visible + .remember__box {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.login__forgot {
+    color: var(--accent-soft-ink);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.login__forgot:hover {
+    text-decoration: underline;
+}
+
+.login__error {
+    margin: -6px 0 16px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    color: var(--danger);
+    background: var(--danger-soft);
     font-size: 0.72rem;
+    font-weight: 700;
+    animation: shake 0.45s var(--ease);
 }
 
-.login-card button {
-    width: 100%;
-    height: 46px;
-    margin-top: 28px;
-    padding: 0 16px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border: 0;
-    border-radius: 8px;
-    color: #fff;
-    background: #31572C;
-    font: inherit;
-    font-size: 0.84rem;
-    font-weight: 800;
-    cursor: pointer;
-    transition: background 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+.login__submit {
+    min-height: 48px;
+    font-size: 0.8rem;
 }
 
-.login-card button:hover {
-    background: #274623;
-    box-shadow: 0 8px 18px rgba(40, 75, 80, 0.18);
-    transform: translateY(-1px);
+.spinner {
+    width: 15px;
+    height: 15px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
 }
 
-.login-card button span {
-    font-size: 1.2rem;
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
-.register-prompt {
-    margin: 24px 0 0;
-    color: #31572C;
-    font-size: 0.72rem;
-    text-align: center;
-}
+/* Responsivo */
 
-.register-prompt a {
-    font-weight: 800;
-}
-
-@media (max-width: 480px) {
-    .login-page {
-        padding: 0;
+@media (max-width: 820px) {
+    .login__shell {
+        grid-template-columns: 1fr;
+        min-height: 0;
     }
 
-    .login-shell {
-        min-height: 100vh;
-        border: 0;
-        border-radius: 0;
-        display: block;
+    .login__brand {
+        gap: 26px;
+        padding: 28px 26px;
     }
 
-    .welcome-panel {
-        min-height: 340px;
-        padding: 104px 28px 42px;
-    }
-
-    .welcome-panel h1 {
-        max-width: 280px;
-        font-size: 3rem;
-    }
-
-    .panel-description,
-    .panel-rule,
-    .panel-note {
+    .login__highlights {
         display: none;
     }
 
-    .login-navigation {
-        top: 24px;
-        left: 28px;
-    }
-
-    .login-content {
-        padding: 42px 24px 48px;
+    .login__form-side {
+        padding: 30px 26px 36px;
     }
 }
 
-@media (min-width: 481px) and (max-width: 820px) {
-    .login-page {
-        padding: 16px;
+@media (max-width: 480px) {
+    .login {
+        padding: 14px;
     }
 
-    .login-shell {
-        grid-template-columns: minmax(250px, 0.8fr) minmax(360px, 1.2fr);
-    }
-
-    .welcome-panel {
-        padding-right: 32px;
-        padding-left: 32px;
-    }
-
-    .login-content {
-        padding-right: 38px;
-        padding-left: 38px;
+    .login__brand-copy p:last-child {
+        display: none;
     }
 }
-.login-error {
-    margin: 0 0 12px;
-    color: #b9533d;
-    font-size: 0.72rem;
-    font-weight: 700;
-}
-
 </style>

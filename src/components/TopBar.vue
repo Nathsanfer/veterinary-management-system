@@ -1,6 +1,8 @@
 <script setup>
 import { useRouter } from 'vue-router'
 import { canAccess, displayName, displayRole, initials, signOut } from '../stores/auth'
+import { resolvedTheme, toggleTheme } from '../stores/theme'
+import { notify } from '../stores/toast'
 
 const router = useRouter()
 
@@ -14,34 +16,63 @@ const navLinks = [
 
 async function logout() {
   await signOut()
+  notify('Você saiu da sua conta.', 'info')
   router.push('/')
 }
 </script>
 
 <template>
-  <header class="top-bar">
-    <div class="top-bar__inner">
-      <router-link class="brand" to="/dashboard" aria-label="Ir para o dashboard VetFlow">
+  <header class="topbar">
+    <div class="topbar__inner">
+      <router-link class="brand" to="/dashboard" aria-label="Ir para o painel VetFlow">
+        <span class="brand__mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+            <ellipse cx="6.5" cy="9" rx="2" ry="2.6" />
+            <ellipse cx="10.5" cy="5.4" rx="2" ry="2.6" />
+            <ellipse cx="14.5" cy="5.4" rx="2" ry="2.6" />
+            <ellipse cx="18.5" cy="9" rx="2" ry="2.6" />
+            <path d="M12 11.2c-2.9 0-5.6 3.6-5.6 6.2 0 1.9 1.5 2.8 3.1 2.8 1.1 0 1.7-.5 2.5-.5s1.4.5 2.5.5c1.6 0 3.1-.9 3.1-2.8 0-2.6-2.7-6.2-5.6-6.2z" />
+          </svg>
+        </span>
         <span class="brand__copy">
-          <strong>Gestão Completa</strong>
+          <strong>VetFlow</strong>
           <small>Clínica veterinária</small>
         </span>
       </router-link>
 
       <nav class="main-nav" aria-label="Navegação principal">
         <template v-for="link in navLinks" :key="link.to">
-          <router-link v-if="canAccess(link.to)" :to="link.to">{{ link.label }}</router-link>
+          <router-link v-if="canAccess(link.to)" :to="link.to" class="main-nav__link">
+            {{ link.label }}
+          </router-link>
         </template>
       </nav>
 
-      <div class="top-bar__actions">
-        <router-link class="profile-link" to="/profile" aria-label="Abrir perfil">
-          <span class="profile-link__avatar" aria-hidden="true">{{ initials }}</span>
-          <span class="profile-link__text">
+      <div class="topbar__actions">
+        <button
+          class="theme-toggle"
+          type="button"
+          :aria-label="resolvedTheme === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro'"
+          :title="resolvedTheme === 'dark' ? 'Modo claro' : 'Modo escuro'"
+          @click="toggleTheme"
+        >
+          <svg v-if="resolvedTheme === 'dark'" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+          </svg>
+          <svg v-else viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
+            <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z" />
+          </svg>
+        </button>
+
+        <router-link class="profile-chip" to="/profile" aria-label="Abrir perfil">
+          <span class="profile-chip__avatar" aria-hidden="true">{{ initials }}</span>
+          <span class="profile-chip__text">
             <strong>{{ displayName }}</strong>
             <small>{{ displayRole }}</small>
           </span>
         </router-link>
+
         <button class="logout-button" type="button" @click="logout">Sair</button>
       </div>
     </div>
@@ -49,21 +80,20 @@ async function logout() {
 </template>
 
 <style scoped>
-.top-bar {
-  --topbar-ink: #183b3a;
-  --topbar-muted: #6c8580;
-  --topbar-line: #dce8df;
-  --topbar-accent: #31572c;
-  width: 100%;
-  min-height: 76px;
-  border-bottom: 1px solid var(--topbar-line);
-  background: #f3f5f1;
-  box-shadow: 0 8px 24px rgba(24, 59, 58, 0.05);
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-bottom: 1px solid var(--line);
+  background: var(--glass);
+  backdrop-filter: saturate(160%) blur(14px);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  transition: background-color 0.35s, border-color 0.35s;
 }
 
-.top-bar__inner {
-  width: min(100% - 48px, 1380px);
-  min-height: 76px;
+.topbar__inner {
+  width: min(100% - 48px, 1280px);
+  min-height: 74px;
   margin: 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -71,216 +101,252 @@ async function logout() {
   gap: 24px;
 }
 
-.brand,
-.profile-link,
-.main-nav a {
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  color: var(--ink);
   text-decoration: none;
 }
 
-.brand {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  color: var(--topbar-ink);
-}
-
 .brand__mark {
-  width: 38px;
-  height: 38px;
   display: grid;
   place-items: center;
-  border: 1px solid #c7ddc5;
+  width: 38px;
+  height: 38px;
   border-radius: 12px 12px 12px 4px;
-  color: #f7f8f3;
-  background: var(--topbar-accent);
-  box-shadow: 0 5px 12px rgba(49, 87, 44, 0.18);
-  font-size: 1.05rem;
-  font-weight: 800;
+  color: var(--accent-ink);
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+  box-shadow: 0 8px 18px -8px var(--accent);
+  transition: transform 0.4s var(--ease);
+}
+
+.brand:hover .brand__mark {
+  transform: rotate(-8deg) scale(1.05);
 }
 
 .brand__copy {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   line-height: 1;
 }
 
 .brand__copy strong {
-  font-size: 1.04rem;
+  font-size: 1.02rem;
   letter-spacing: -0.02em;
 }
 
-.brand__copy small,
-.profile-link__text small {
-  color: var(--topbar-muted);
-  font-size: 0.57rem;
+.brand__copy small {
+  color: var(--muted);
+  font-size: 0.56rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .main-nav {
-  min-width: 0;
-  justify-self: center;
   display: flex;
   align-items: center;
-  gap: 26px;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--surface-3);
+  transition: background-color 0.35s;
 }
 
-.main-nav a {
-  position: relative;
-  padding: 29px 12px 26px;
-  color: var(--topbar-muted);
-  font-size: 0.75rem;
+.main-nav__link {
+  padding: 9px 14px;
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 0.72rem;
   font-weight: 700;
+  text-decoration: none;
   white-space: nowrap;
-  transition: color 180ms ease;
+  transition: color 0.2s, background-color 0.25s, box-shadow 0.25s, transform 0.2s var(--ease);
 }
 
-.main-nav a::after {
-  position: absolute;
-  right: 12px;
-  bottom: -1px;
-  left: 12px;
-  height: 3px;
-  content: '';
-  border-radius: 3px 3px 0 0;
-  background: transparent;
-  transition: background 180ms ease;
+.main-nav__link:hover {
+  color: var(--ink);
 }
 
-.main-nav a:hover,
-.main-nav a.router-link-active {
-  color: var(--topbar-ink);
+.main-nav__link:active {
+  transform: scale(0.97);
 }
 
-.main-nav a.router-link-active::after {
-  background: #99b55f;
+.main-nav__link.router-link-active {
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 
-.top-bar__actions {
-  min-width: 0;
-  justify-self: end;
+.topbar__actions {
   display: flex;
   align-items: center;
-  gap: 20px;
+  justify-content: flex-end;
+  gap: 12px;
+  min-width: 0;
 }
 
-.profile-link {
+.theme-toggle {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink-2);
+  background: var(--surface);
+  transition: transform 0.25s var(--ease), color 0.2s, background-color 0.2s, border-color 0.2s;
+}
+
+.theme-toggle:hover {
+  color: var(--accent-soft-ink);
+  border-color: var(--line-strong);
+  transform: rotate(18deg);
+}
+
+.theme-toggle:active {
+  transform: scale(0.92);
+}
+
+.theme-toggle svg {
+  animation: spin-in 0.5s var(--ease);
+}
+
+@keyframes spin-in {
+  from {
+    opacity: 0;
+    transform: rotate(-60deg) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.profile-chip {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  color: var(--topbar-ink);
+  min-width: 0;
+  padding: 4px 10px 4px 4px;
+  border-radius: 999px;
+  color: var(--ink);
+  text-decoration: none;
+  transition: background-color 0.2s;
 }
 
-.profile-link__avatar {
+.profile-chip:hover {
+  background: var(--surface-3);
+}
+
+.profile-chip__avatar {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
   width: 34px;
   height: 34px;
-  display: grid;
-  place-items: center;
-  border: 1px solid #c3d7cf;
   border-radius: 50%;
-  color: #31572c;
-  background: #e5efe2;
-  font-size: 0.63rem;
+  color: var(--accent-soft-ink);
+  background: var(--accent-soft);
+  font-size: 0.64rem;
   font-weight: 800;
 }
 
-.profile-link__text {
+.profile-chip__text {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  line-height: 1;
+  gap: 3px;
+  min-width: 0;
+  line-height: 1.1;
 }
 
-.profile-link__text strong {
-  font-size: 0.7rem;
+.profile-chip__text strong {
+  overflow: hidden;
+  max-width: 150px;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-chip__text small {
+  color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 600;
 }
 
 .logout-button {
-  border: 1px solid var(--topbar-line);
-  border-radius: 8px;
-  padding: 7px 13px;
-  color: var(--topbar-muted);
-  background: #fff;
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.68rem;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 0.7rem;
   font-weight: 700;
-  transition: color 180ms ease, border-color 180ms ease;
+  transition: color 0.2s, border-color 0.2s, background-color 0.2s, transform 0.2s var(--ease);
 }
 
 .logout-button:hover {
-  color: var(--topbar-ink);
-  border-color: #c3d7cf;
+  color: var(--danger);
+  border-color: var(--danger-soft);
+  background: var(--danger-soft);
 }
 
-.profile-link__arrow {
-  margin-left: 2px;
-  color: var(--topbar-muted);
-  font-size: 1rem;
+.logout-button:active {
+  transform: scale(0.96);
 }
 
 @media (max-width: 1080px) {
-  .top-bar__inner {
+  .topbar__inner {
     gap: 16px;
   }
 
-  .main-nav a {
-    padding-right: 8px;
-    padding-left: 8px;
-  }
-
-  .main-nav a::after {
-    right: 8px;
-    left: 8px;
-  }
-
-  .status {
+  .profile-chip__text {
     display: none;
   }
 }
 
-@media (max-width: 760px) {
-  .top-bar__inner {
-    width: min(100% - 28px, 1380px);
-    min-height: 68px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0 18px;
+@media (max-width: 860px) {
+  .topbar__inner {
+    width: min(100% - 28px, 1280px);
+    grid-template-columns: 1fr auto;
+    row-gap: 0;
     padding: 12px 0 0;
-  }
-
-  .top-bar {
-    min-height: 116px;
+    min-height: 0;
   }
 
   .main-nav {
-    order: 3;
-    width: 100%;
-    justify-self: auto;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: stretch;
     overflow-x: auto;
     scrollbar-width: none;
+    margin: 12px 0;
   }
 
   .main-nav::-webkit-scrollbar {
     display: none;
   }
 
-  .main-nav a {
-    padding: 14px 10px 15px;
-    font-size: 0.69rem;
+  .main-nav__link {
+    flex: 0 0 auto;
   }
 
-  .main-nav a::after {
-    right: 10px;
-    left: 10px;
+  .topbar__actions {
+    grid-row: 1;
+    grid-column: 2;
   }
 
-  .profile-link__text,
-  .profile-link__arrow {
-    display: none;
+  .topbar__inner .brand {
+    grid-row: 1;
+  }
+}
+
+@media (max-width: 520px) {
+  .logout-button {
+    padding: 8px 10px;
   }
 }
 </style>

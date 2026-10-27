@@ -3,6 +3,7 @@ import { computed, ref, onMounted } from "vue";
 import TopBar from "../components/TopBar.vue";
 import { supabase } from "../lib/supabase";
 import { getServiceIcon, SERVICE_ICON_OPTIONS } from "../lib/serviceIcons";
+import { notify } from "../stores/toast";
 
 const services = ref([]);
 const loading = ref(false);
@@ -138,6 +139,7 @@ const salvarServico = async () => {
     return;
   }
 
+  notify(editingServiceId.value ? "Serviço atualizado." : "Serviço criado no catálogo.");
   isModalOpen.value = false;
   editingServiceId.value = null;
   serviceForm.value = blankService();
@@ -154,541 +156,337 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="services-page">
-    <TopBar />
+  <TopBar />
 
-    <main class="services-content">
-      <header class="services-heading">
-        <div>
-          <p class="eyebrow">CATÁLOGO DA CLÍNICA</p>
-          <h1>Serviços oferecidos</h1>
-          <p class="heading-description">
-            Cuidados pensados para acompanhar cada fase da vida do seu pet.
-          </p>
-        </div>
-        <div class="services-heading__actions">
-          <span class="service-count"
-            >{{ activeServicesCount }} serviços ativos</span
-          >
-          <button class="primary-button" type="button" @click="openServiceModal">
-            Novo serviço
-          </button>
-        </div>
-      </header>
+  <main class="page services-page">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Catálogo da clínica</p>
+        <h1 class="page-title">Serviços oferecidos</h1>
+        <p class="page-subtitle">Cuidados pensados para acompanhar cada fase da vida do seu pet.</p>
+      </div>
+      <div class="header-actions">
+        <span class="badge badge--accent">{{ activeServicesCount }} serviços ativos</span>
+        <button class="btn btn--primary" type="button" @click="openServiceModal">
+          <span aria-hidden="true">+</span> Novo serviço
+        </button>
+      </div>
+    </header>
 
-      <p
-        v-if="loadError"
-        class="state-message state-message--error"
-        role="alert"
+    <p v-if="loadError" class="text-error" role="alert">{{ loadError }}</p>
+
+    <div v-if="loading && !services.length" class="services-grid">
+      <div v-for="n in 6" :key="n" class="skeleton service-skeleton"></div>
+    </div>
+
+    <div v-else-if="!services.length" class="card empty-state">
+      <span class="empty-state__icon" aria-hidden="true">✳</span>
+      <strong>Nenhum serviço cadastrado</strong>
+      <span>Crie o primeiro serviço para que ele apareça no catálogo e na agenda.</span>
+    </div>
+
+    <section v-else class="services-grid stagger" aria-label="Serviços oferecidos pela clínica">
+      <article
+        v-for="(service, index) in services"
+        :key="service.id"
+        class="card service-card"
+        :class="{ 'is-inactive': !service.active }"
+        :style="{ '--i': index }"
+        role="button"
+        tabindex="0"
+        :aria-label="`Editar serviço ${service.name}`"
+        @click="editService(service)"
+        @keydown.enter="editService(service)"
+        @keydown.space.prevent="editService(service)"
       >
-        {{ loadError }}
-      </p>
-      <p v-else-if="loading && !services.length" class="state-message">
-        Carregando serviços...
-      </p>
-
-      <section
-        class="services-grid"
-        aria-label="Serviços oferecidos pela clínica"
-      >
-        <article
-          v-for="service in services"
-          :key="service.id"
-          class="service-card"
-          :class="{ 'service-card--inactive': !service.active }"
-          role="button"
-          tabindex="0"
-          @click="editService(service)"
-          @keydown.enter="editService(service)"
-          @keydown.space.prevent="editService(service)"
-        >
-          <div
-            class="service-icon"
-            :style="{ backgroundColor: service.color }"
-            aria-hidden="true"
-          >
+        <div class="service-card__top">
+          <div class="service-icon" :style="{ backgroundColor: service.color }" aria-hidden="true">
             <i :class="getServiceIcon(service.icon)" />
           </div>
+          <span v-if="!service.active" class="badge badge--neutral">Inativo</span>
+          <span v-else class="edit-hint" aria-hidden="true">Editar</span>
+        </div>
 
-          <div class="service-card__body">
-            <div class="service-card__topline">
-              <h2>{{ service.name }}</h2>
-              <span v-if="!service.active" class="service-status">Inativo</span>
-            </div>
-            <p>{{ service.description }}</p>
+        <h2 class="service-card__name">{{ service.name }}</h2>
+        <p class="service-card__desc">{{ service.description || 'Sem descrição.' }}</p>
 
-            <div class="service-card__footer">
-              <div>
-                <span class="footer-label">Valor</span>
-                <strong>{{ formatPrice(service.price) }}</strong>
-              </div>
-              <div class="footer-unit">
-                <span class="footer-label">Unidade</span>
-                <strong>{{ service.unit }}</strong>
-              </div>
-            </div>
+        <div class="service-card__footer">
+          <div>
+            <span class="footer-label">Valor</span>
+            <strong class="price">{{ formatPrice(service.price) }}</strong>
           </div>
-        </article>
-      </section>
-    </main>
+          <div class="footer-unit">
+            <span class="footer-label">Unidade</span>
+            <strong>{{ service.unit || '—' }}</strong>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
 
-    <div
-      v-if="isModalOpen"
-      class="modal-backdrop"
-      @click.self="closeServiceModal"
-    >
-      <form class="modal" @submit.prevent="salvarServico">
-        <button
-          class="modal-close"
-          type="button"
-          aria-label="Fechar"
-          @click="closeServiceModal"
-        >
-          ×
-        </button>
-        <p class="eyebrow">CATÁLOGO DA CLÍNICA</p>
-        <h2>{{ editingServiceId ? "Editar serviço" : "Novo serviço" }}</h2>
+  <Transition name="overlay">
+    <div v-if="isModalOpen" class="overlay" @click.self="closeServiceModal">
+      <form class="modal-panel modal-panel--wide" role="dialog" aria-modal="true" aria-labelledby="service-title" @submit.prevent="salvarServico">
+        <button class="modal-close" type="button" aria-label="Fechar" @click="closeServiceModal">×</button>
+        <p class="eyebrow">Catálogo da clínica</p>
+        <h2 id="service-title" class="modal-title">{{ editingServiceId ? "Editar serviço" : "Novo serviço" }}</h2>
 
-        <label>
-          Nome do serviço
-          <input
-            v-model="serviceForm.name"
-            required
-            maxlength="120"
-            placeholder="Ex.: Consulta veterinária"
-          />
-        </label>
-
-        <label>
-          Descrição
-          <textarea
-            v-model="serviceForm.description"
-            maxlength="300"
-            placeholder="Descreva brevemente o serviço"
-          />
-        </label>
-
-        <div class="form-row">
-          <label>
-            Valor (R$)
-            <input
-              v-model="serviceForm.price"
-              type="number"
-              min="0"
-              step="0.01"
-              required
-              placeholder="0,00"
-            />
+        <div class="form-stack">
+          <label class="field">
+            Nome do serviço
+            <input v-model="serviceForm.name" class="input" required maxlength="120" placeholder="Ex.: Consulta veterinária" />
           </label>
-          <label>
-            Unidade
-            <input v-model="serviceForm.unit" required placeholder="por serviço" />
+
+          <label class="field">
+            Descrição
+            <textarea v-model="serviceForm.description" class="input input--area" maxlength="300" placeholder="Descreva brevemente o serviço"></textarea>
+          </label>
+
+          <div class="form-row">
+            <label class="field">
+              Valor (R$)
+              <input v-model="serviceForm.price" class="input" type="number" min="0" step="0.01" required placeholder="0,00" />
+            </label>
+            <label class="field">
+              Unidade
+              <input v-model="serviceForm.unit" class="input" required placeholder="por serviço" />
+            </label>
+          </div>
+
+          <fieldset class="choice-group">
+            <legend>Cor do serviço</legend>
+            <div class="color-options">
+              <button
+                v-for="color in serviceColors"
+                :key="color"
+                class="color-option"
+                :class="{ 'is-selected': serviceForm.color === color }"
+                :style="{ backgroundColor: color }"
+                type="button"
+                :aria-label="`Selecionar cor ${color}`"
+                :aria-pressed="serviceForm.color === color"
+                @click="serviceForm.color = color"
+              >
+                <span v-if="serviceForm.color === color" aria-hidden="true">✓</span>
+              </button>
+            </div>
+          </fieldset>
+
+          <fieldset class="choice-group">
+            <legend>Ícone do serviço</legend>
+            <div class="icon-options">
+              <button
+                v-for="icon in SERVICE_ICON_OPTIONS"
+                :key="icon.name"
+                class="icon-option"
+                :class="{ 'is-selected': serviceForm.icon === icon.name }"
+                type="button"
+                :aria-label="`Selecionar ícone ${icon.label}`"
+                :aria-pressed="serviceForm.icon === icon.name"
+                @click="serviceForm.icon = icon.name"
+              >
+                <i :class="getServiceIcon(icon.name)" aria-hidden="true" />
+                <span>{{ icon.label }}</span>
+              </button>
+            </div>
+          </fieldset>
+
+          <label class="active-toggle">
+            <input v-model="serviceForm.active" type="checkbox" />
+            <span class="switch" aria-hidden="true"></span>
+            <span>Serviço ativo no catálogo</span>
           </label>
         </div>
 
-        <fieldset class="choice-group">
-          <legend>Cor do serviço</legend>
-          <div class="color-options">
-            <button
-              v-for="color in serviceColors"
-              :key="color"
-              class="color-option"
-              :class="{ selected: serviceForm.color === color }"
-              :style="{ backgroundColor: color }"
-              type="button"
-              :aria-label="`Selecionar cor ${color}`"
-              :aria-pressed="serviceForm.color === color"
-              @click="serviceForm.color = color"
-            >
-              <span v-if="serviceForm.color === color">✓</span>
-            </button>
-          </div>
-        </fieldset>
+        <p v-if="saveError" class="text-error save-error" role="alert">{{ saveError }}</p>
 
-        <fieldset class="choice-group">
-          <legend>Ícone do serviço</legend>
-          <div class="icon-options">
-            <button
-              v-for="icon in SERVICE_ICON_OPTIONS"
-              :key="icon.name"
-              class="icon-option"
-              :class="{ selected: serviceForm.icon === icon.name }"
-              type="button"
-              :aria-label="`Selecionar ícone ${icon.label}`"
-              :aria-pressed="serviceForm.icon === icon.name"
-              @click="serviceForm.icon = icon.name"
-            >
-              <i :class="getServiceIcon(icon.name)" aria-hidden="true" />
-              <span>{{ icon.label }}</span>
-            </button>
-          </div>
-        </fieldset>
-
-        <label class="active-toggle">
-          <input v-model="serviceForm.active" type="checkbox" />
-          <span>Serviço ativo</span>
-        </label>
-
-        <p v-if="saveError" class="modal-error" role="alert">{{ saveError }}</p>
-        <button class="primary-button modal-submit" type="submit" :disabled="saving">
-          {{
-            saving
-              ? "Salvando..."
-              : editingServiceId
-                ? "Salvar alterações"
-                : "Criar serviço"
-          }}
+        <button class="btn btn--primary btn--block submit" type="submit" :disabled="saving">
+          <span v-if="saving" class="spinner" aria-hidden="true"></span>
+          {{ saving ? "Salvando..." : editingServiceId ? "Salvar alterações" : "Criar serviço" }}
         </button>
       </form>
     </div>
-  </div>
+  </Transition>
 </template>
 
 <style scoped>
 .services-page {
-  min-height: 100vh;
-  color: #183b3a;
-  background: #f3f5f1;
-}
-
-.services-content {
-  width: min(100% - 48px, 1380px);
-  margin: 0 auto;
-  padding: 32px 0 64px;
-}
-
-.services-heading {
   display: flex;
-  align-items: end;
-  justify-content: space-between;
-  gap: 32px;
-  margin-bottom: 34px;
+  flex-direction: column;
+  gap: 24px;
 }
 
-.services-heading__actions {
+.page-header {
+  margin-bottom: 0;
+}
+
+.header-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 20px;
-}
-
-.primary-button {
-  border: 0;
-  border-radius: 9px;
-  padding: 12px 17px;
-  color: #f7f8f3;
-  background: #2f7d73;
-  box-shadow: 0 8px 16px rgba(47, 125, 115, 0.18);
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.72rem;
-  font-weight: 800;
-  transition: transform 180ms ease, background 180ms ease;
-}
-
-.primary-button:hover {
-  background: #24665e;
-  transform: translateY(-2px);
-}
-
-.primary-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.eyebrow {
-  margin: 0 0 10px;
-  color: #789575;
-  font-size: 0.55rem;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-}
-
-.services-heading h1 {
-  margin: 0;
-  color: #1d1f1fd0;
-  font-size: clamp(1.9rem, 3vw, 2rem);
-  font-weight: 800;
-  line-height: 1;
-}
-
-.heading-description {
-  max-width: 550px;
-  margin: 10px 0 0;
-  color: #728682;
-  font-size: 0.82rem;
-  line-height: 1.6;
-}
-
-.service-count {
-  padding-bottom: 5px;
-  color: #789575;
-  font-size: 0.68rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.state-message {
-  margin: 0 0 20px;
-  color: var(--muted, #728682);
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.state-message--error {
-  color: #b9533d;
+  gap: 12px;
 }
 
 .services-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 28px 28px;
-  margin: -10px 0;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 18px;
 }
 
 .service-card {
   position: relative;
-  height: 180px;
   display: flex;
-  align-items: stretch;
-  border: 1px solid rgba(24, 59, 58, 0.07);
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 14px 30px rgba(24, 59, 58, 0.07);
+  flex-direction: column;
+  padding: 22px;
   cursor: pointer;
-  transition:
-    transform 180ms ease,
-    box-shadow 180ms ease;
+  transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease), border-color 0.3s, opacity 0.3s;
 }
 
 .service-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 18px 34px rgba(24, 59, 58, 0.11);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--line-strong);
 }
 
-.service-card--inactive {
-  opacity: 0.72;
-  filter: grayscale(0.2);
+.service-card:active {
+  transform: translateY(-1px) scale(0.99);
 }
 
-.service-card--inactive:hover {
-  opacity: 0.9;
+.service-card.is-inactive {
+  opacity: 0.62;
 }
 
-.service-icon {
-  width: 76px;
-  height: 76px;
-  flex: 0 0 76px;
-  align-self: center;
-  margin-left: -22px;
-  display: grid;
-  place-items: center;
-  border: 7px solid #f3f5f1;
-  border-radius: 50%;
-  color: #f7f8f3;
-  box-shadow: 0 6px 14px rgba(24, 59, 58, 0.12);
-}
-
-.service-icon i {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  font-size: 1.65rem;
-  font-weight: 300;
-}
-
-.service-icon--mint {
-  background: #2f7d73;
-}
-.service-icon--aqua {
-  background: #3f8f8a;
-}
-.service-icon--lemon {
-  background: #789b5a;
-}
-.service-icon--peach {
-  background: #b9785d;
-}
-.service-icon--lilac {
-  background: #6e7399;
-}
-.service-icon--blue {
-  background: #5c8193;
-}
-
-.service-card__body {
-  min-width: 0;
-  flex: 1;
-  padding: 25px 24px 22px 16px;
+.service-card__top {
   display: flex;
-  flex-direction: column;
-}
-
-.service-card__topline {
-  display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.service-status {
-  flex: 0 0 auto;
-  padding: 4px 7px;
-  border-radius: 999px;
-  background: #f5e4e0;
-  color: #ad5d4e;
-  font-size: 0.58rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
+.service-icon {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 16px;
+  color: #fff;
+  font-size: 1.25rem;
+  box-shadow: 0 10px 20px -12px currentColor;
+  transition: transform 0.4s var(--ease);
 }
 
-.service-card h2 {
-  min-width: 0;
-  margin: 0;
-  color: #252929d0;
-  font-size: 1rem;
-  font-weight: 800;
-  line-height: 1.25;
+.service-card:hover .service-icon {
+  transform: rotate(-6deg) scale(1.06);
 }
 
-.service-card__body > p {
-  display: -webkit-box;
-  min-height: 48px;
-  margin: 9px 0 17px;
-  overflow: hidden;
-  color: #6c7d7a;
-  font-size: 0.76rem;
-  line-height: 1.55;
-  -webkit-box-orient: vertical;
+.edit-hint {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+  opacity: 0;
+  transform: translateX(4px);
+  transition: opacity 0.25s, transform 0.25s var(--ease);
+}
+
+.service-card:hover .edit-hint,
+.service-card:focus-visible .edit-hint {
+  opacity: 1;
+  transform: none;
+}
+
+.service-card__name {
+  margin-top: 18px;
+  color: var(--ink);
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.service-card__desc {
+  flex: 1;
+  margin: 8px 0 18px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.6;
 }
 
 .service-card__footer {
-  margin-top: -1rem;
-  padding-top: 15px;
   display: flex;
-  align-items: end;
-  gap: 27px;
-  border-top: 1px solid #edf1ec;
-}
-
-.service-card__footer > div {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.footer-unit {
-  padding-left: 27px;
-  border-left: 1px solid #1eb8ad;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
 }
 
 .footer-label {
-  color: #7e908c;
-  font-size: 0.62rem;
-  font-weight: 600;
-}
-
-.service-card__footer strong {
-  color: #31572cbc;
-  font-size: 0.79rem;
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 0.56rem;
   font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  overflow-y: auto;
-  background: rgba(24, 59, 58, 0.35);
-  backdrop-filter: blur(3px);
-}
-
-.modal {
-  position: relative;
-  width: min(100%, 570px);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin: auto;
-  padding: 30px;
-  border-radius: 16px;
-  background: #f7f8f3;
-  box-shadow: 0 24px 60px rgba(24, 59, 58, 0.25);
-}
-
-.modal h2 {
-  margin: 0 0 4px;
-  color: #183b3a;
-  font-size: 1.3rem;
-}
-
-.modal-close {
-  position: absolute;
-  top: 14px;
-  right: 16px;
-  border: 0;
-  background: none;
-  color: #728682;
-  cursor: pointer;
-  font-size: 1.6rem;
-}
-
-.modal label,
-.choice-group legend {
-  color: #728682;
-  font-size: 0.68rem;
+.price {
+  color: var(--ink);
+  font-size: 1.05rem;
   font-weight: 700;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
 }
 
-.modal label {
+.footer-unit {
+  text-align: right;
+}
+
+.footer-unit strong {
+  color: var(--ink-2);
+  font-size: 0.7rem;
+}
+
+.service-skeleton {
+  height: 230px;
+  border-radius: var(--radius-lg);
+}
+
+/* Modal */
+
+.modal-panel--wide {
+  width: min(100%, 520px);
+}
+
+.modal-title {
+  margin: 0 0 22px;
+  padding-right: 28px;
+  color: var(--ink);
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.05em;
+}
+
+.input--area {
+  min-height: 84px;
+  padding: 12px 14px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.form-stack {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-}
-
-.modal input,
-.modal textarea {
-  border: 1px solid #dce5dd;
-  border-radius: 9px;
-  padding: 11px 12px;
-  color: #183b3a;
-  background: #fff;
-  font: inherit;
-  font-size: 0.78rem;
-  outline: none;
-  resize: vertical;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.modal input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  accent-color: #2f7d73;
-}
-
-.modal textarea {
-  min-height: 62px;
-}
-
-.modal input:focus,
-.modal textarea:focus {
-  border-color: #99b55f;
-  box-shadow: 0 0 0 3px rgba(153, 181, 95, 0.2);
+  gap: 16px;
 }
 
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 14px;
 }
 
 .choice-group {
+  min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
@@ -696,148 +494,171 @@ onMounted(() => {
 
 .choice-group legend {
   margin-bottom: 9px;
-}
-
-.active-toggle {
-  flex-direction: row !important;
-  align-items: center;
-  gap: 8px !important;
-  cursor: pointer;
+  padding: 0;
+  color: var(--ink-2);
+  font-size: 0.68rem;
+  font-weight: 700;
 }
 
 .color-options {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
 .color-option {
-  width: 30px;
-  height: 30px;
   display: grid;
   place-items: center;
-  border: 3px solid transparent;
+  width: 36px;
+  height: 36px;
+  border: 2px solid transparent;
   border-radius: 50%;
   color: #fff;
-  cursor: pointer;
-  font-size: 0.75rem;
-  transition: transform 180ms ease, border-color 180ms ease;
+  font-size: 0.8rem;
+  font-weight: 800;
+  transition: transform 0.25s var(--ease), box-shadow 0.25s;
 }
 
-.color-option:hover,
-.color-option.selected {
-  border-color: #183b3a;
-  transform: scale(1.12);
+.color-option:hover {
+  transform: scale(1.08);
+}
+
+.color-option.is-selected {
+  box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px currentColor;
 }
 
 .icon-options {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
 .icon-option {
-  min-height: 62px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid #dce5dd;
-  border-radius: 9px;
-  color: #31572c;
-  background: #fff;
-  cursor: pointer;
-  font: inherit;
-  transition: border-color 180ms ease, background 180ms ease;
-}
-
-.icon-option:hover,
-.icon-option.selected {
-  border-color: #2f7d73;
-  background: #e5f0df;
+  gap: 5px;
+  padding: 10px 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+  background: var(--surface-2);
+  font-size: 0.56rem;
+  font-weight: 700;
+  transition: border-color 0.2s, background-color 0.2s, color 0.2s, transform 0.2s var(--ease);
 }
 
 .icon-option i {
-  font-size: 1.3rem;
+  font-size: 1.05rem;
+  color: var(--ink-2);
 }
 
-.icon-option span {
-  color: #728682;
-  font-size: 0.55rem;
-  font-weight: 700;
+.icon-option:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+  transform: translateY(-2px);
 }
 
-.modal-error {
-  margin: 0;
-  color: #b9533d;
+.icon-option.is-selected {
+  border-color: var(--accent);
+  color: var(--accent-soft-ink);
+  background: var(--accent-soft);
+}
+
+.icon-option.is-selected i {
+  color: var(--accent-soft-ink);
+}
+
+.active-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink-2);
   font-size: 0.74rem;
   font-weight: 700;
+  cursor: pointer;
 }
 
-.modal-submit {
-  width: 100%;
-  margin-top: 3px;
+.active-toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
 }
 
-@media (max-width: 760px) {
-  .services-content {
-    width: min(100% - 32px, 1220px);
-    padding-top: 36px;
-  }
+.switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--line-strong);
+  transition: background-color 0.25s;
+}
 
-  .services-heading {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 14px;
-    margin-bottom: 27px;
-  }
+.switch::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  transition: transform 0.3s var(--ease);
+  content: '';
+}
 
-  .services-heading__actions {
-    width: 100%;
-    justify-content: space-between;
-  }
+.active-toggle input:checked + .switch {
+  background: var(--accent);
+}
 
+.active-toggle input:checked + .switch::after {
+  transform: translateX(18px);
+}
+
+.active-toggle input:focus-visible + .switch {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.save-error {
+  margin: 14px 0 0;
+}
+
+.submit {
+  margin-top: 22px;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 680px) {
   .services-grid {
     grid-template-columns: 1fr;
-    gap: 22px;
-  }
-
-  .icon-options {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 420px) {
-  .modal {
-    padding: 25px 20px;
   }
 
   .form-row {
     grid-template-columns: 1fr;
   }
 
-  .color-options {
-    justify-content: space-between;
+  .header-actions {
+    width: 100%;
   }
 
-  .service-card__body {
-    padding-right: 16px;
-  }
-
-  .service-icon {
-    width: 64px;
-    height: 64px;
-    flex-basis: 64px;
-    margin-left: -18px;
-    border-width: 5px;
-  }
-
-  .service-card__footer {
-    gap: 16px;
-  }
-
-  .footer-unit {
-    padding-left: 16px;
+  .header-actions .btn {
+    flex: 1;
   }
 }
 </style>

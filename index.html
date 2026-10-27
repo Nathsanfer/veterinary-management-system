@@ -5,7 +5,19 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="https://cdn-uicons.flaticon.com/3.0.0/uicons-thin-straight/css/uicons-thin-straight.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>veterinary-management-system</title>
+    <meta name="theme-color" content="#31572c" />
+    <meta name="description" content="VetFlow: gestão de agenda, atendimentos, serviços e finanças para clínicas veterinárias." />
+    <title>VetFlow · Gestão veterinária</title>
+    <!-- Aplica o tema salvo antes da primeira pintura, evitando piscar a tela -->
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem('vetflow-theme');
+          var dark = saved === 'dark' || (saved !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

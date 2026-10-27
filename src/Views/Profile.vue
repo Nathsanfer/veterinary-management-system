@@ -10,6 +10,9 @@ import {
     profile,
     session
 } from '../stores/auth'
+import { askConfirm } from '../stores/confirm'
+import { notify } from '../stores/toast'
+import { resolvedTheme, themePreference } from '../stores/theme'
 
 /* ---------- Equipe ---------- */
 const team = ref([])
@@ -102,16 +105,15 @@ async function saveName() {
     await carregarEquipe()
     editingName.value = false
     nameSaving.value = false
+    notify('Nome atualizado.')
 }
 
 const passwordForm = ref({ next: '', confirm: '' })
 const passwordSaving = ref(false)
 const passwordError = ref('')
-const passwordSuccess = ref('')
 
 async function changePassword() {
     passwordError.value = ''
-    passwordSuccess.value = ''
 
     if (passwordForm.value.next.length < 6) {
         passwordError.value = 'A nova senha precisa ter ao menos 6 caracteres.'
@@ -131,16 +133,21 @@ async function changePassword() {
         return
     }
     passwordForm.value = { next: '', confirm: '' }
-    passwordSuccess.value = 'Senha alterada com sucesso.'
+    notify('Senha alterada com sucesso.')
 }
+
+/* ---------- Aparência ---------- */
+const themeOptions = [
+    { key: 'system', label: 'Sistema' },
+    { key: 'light', label: 'Claro' },
+    { key: 'dark', label: 'Escuro' }
+]
 
 /* ---------- CRUD de funcionários (somente admin) ---------- */
 const isModalOpen = ref(false)
 const editingId = ref(null)
 const saving = ref(false)
 const saveError = ref('')
-const actionError = ref('')
-const actionNotice = ref('')
 
 const blankMember = () => ({
     name: '',
@@ -200,6 +207,7 @@ const closeModal = () => {
 async function saveMember() {
     saveError.value = ''
     saving.value = true
+    const wasEditing = Boolean(editingId.value)
     try {
         const payload = {
             nome: memberForm.value.name.trim(),
@@ -209,7 +217,7 @@ async function saveMember() {
             telefone: memberForm.value.phone.trim(),
             senha: memberForm.value.password
         }
-        if (editingId.value) {
+        if (wasEditing) {
             await callFunction({ acao: 'atualizar', id: editingId.value, ...payload })
         } else {
             await callFunction({ acao: 'criar', ...payload })
@@ -217,6 +225,7 @@ async function saveMember() {
         isModalOpen.value = false
         editingId.value = null
         memberForm.value = blankMember()
+        notify(wasEditing ? 'Funcionário atualizado.' : 'Funcionário cadastrado.')
         await carregarEquipe()
         await loadProfile()
     } catch (error) {
@@ -227,42 +236,44 @@ async function saveMember() {
 }
 
 async function toggleActive(member) {
-    actionError.value = ''
-    actionNotice.value = ''
     const next = !member.active
-    if (
-        !next &&
-        !window.confirm(`Desativar ${member.name}? Essa pessoa não conseguirá mais entrar no sistema.`)
-    ) {
-        return
+    if (!next) {
+        const confirmed = await askConfirm({
+            title: `Desativar ${member.name}?`,
+            message: 'Essa pessoa não conseguirá mais entrar no sistema. Você pode reativá-la depois.',
+            confirmLabel: 'Desativar',
+            danger: true
+        })
+        if (!confirmed) return
     }
     try {
         await callFunction({ acao: 'definir_ativo', id: member.id, ativo: next })
+        notify(next ? `${member.name} foi reativado.` : `${member.name} foi desativado.`)
         await carregarEquipe()
     } catch (error) {
-        actionError.value = error.message
+        notify(error.message, 'error')
     }
 }
 
 async function removeMember(member) {
-    actionError.value = ''
-    actionNotice.value = ''
-    if (
-        !window.confirm(
-            `Excluir ${member.name} definitivamente? Esta ação não pode ser desfeita. Se a pessoa só vai se afastar, prefira desativar.`
-        )
-    ) {
-        return
-    }
+    const confirmed = await askConfirm({
+        title: `Excluir ${member.name} definitivamente?`,
+        message: 'Esta ação não pode ser desfeita. Se a pessoa só vai se afastar, prefira desativar.',
+        confirmLabel: 'Excluir',
+        danger: true
+    })
+    if (!confirmed) return
     try {
         const result = await callFunction({ acao: 'excluir', id: member.id })
-        if (result?.veterinarioMantido) {
-            actionNotice.value =
-                'Acesso removido. O cadastro do veterinário foi mantido (inativo) porque há atendimentos ligados a ele.'
-        }
+        notify(
+            result?.veterinarioMantido
+                ? 'Acesso removido. O cadastro do veterinário foi mantido (inativo) porque há atendimentos ligados a ele.'
+                : 'Funcionário excluído.',
+            'info'
+        )
         await carregarEquipe()
     } catch (error) {
-        actionError.value = error.message
+        notify(error.message, 'error')
     }
 }
 
@@ -270,191 +281,187 @@ onMounted(carregarEquipe)
 </script>
 
 <template>
-    <div class="profile-page">
-        <TopBar />
+    <TopBar />
 
-        <main class="profile-content">
-            <header class="profile-heading">
-                <div>
-                    <p class="eyebrow">MINHA CONTA</p>
-                    <h1>Perfil</h1>
-                    <p class="heading-description">
-                        Seus dados de acesso e a equipe da clínica.
-                    </p>
-                </div>
-            </header>
+    <main class="page profile-page">
+        <header class="page-header">
+            <div>
+                <p class="eyebrow">Minha conta</p>
+                <h1 class="page-title">Perfil</h1>
+                <p class="page-subtitle">Seus dados de acesso, preferências e a equipe da clínica.</p>
+            </div>
+        </header>
 
-            <section class="profile-grid">
-                <!-- Meus dados -->
-                <article class="panel me-panel">
-                    <div class="me-header">
+        <section class="profile-grid">
+            <!-- Meus dados -->
+            <div class="stack">
+                <article class="card me-card">
+                    <div class="me-head">
                         <span class="me-avatar" aria-hidden="true">{{ initials }}</span>
                         <div class="me-identity">
                             <h2>{{ profile?.nome ?? myEmail }}</h2>
-                            <span class="tag">{{ myRoleLabel }}</span>
+                            <span class="badge badge--accent">{{ myRoleLabel }}</span>
                         </div>
                     </div>
 
                     <dl class="data-list">
-                        <div>
+                        <div class="data-row">
                             <dt>Nome</dt>
                             <dd v-if="!editingName">
-                                {{ profile?.nome ?? '—' }}
-                                <button class="link-button" type="button" @click="startEditName">
-                                    Editar
-                                </button>
+                                <span>{{ profile?.nome ?? '—' }}</span>
+                                <button class="btn btn--ghost btn--sm" type="button" @click="startEditName">Editar</button>
                             </dd>
-                            <dd v-else>
+                            <dd v-else class="data-row__edit">
                                 <form class="inline-form" @submit.prevent="saveName">
-                                    <input
-                                        v-model="nameDraft"
-                                        required
-                                        maxlength="120"
-                                        aria-label="Nome"
-                                    />
-                                    <button class="pay-button" type="submit" :disabled="nameSaving">
-                                        {{ nameSaving ? 'Salvando...' : 'Salvar' }}
-                                    </button>
-                                    <button
-                                        class="pay-button"
-                                        type="button"
-                                        :disabled="nameSaving"
-                                        @click="editingName = false"
-                                    >
-                                        Cancelar
-                                    </button>
+                                    <input v-model="nameDraft" class="input" required maxlength="120" aria-label="Nome" />
+                                    <div class="inline-form__actions">
+                                        <button class="btn btn--primary btn--sm" type="submit" :disabled="nameSaving">
+                                            {{ nameSaving ? 'Salvando...' : 'Salvar' }}
+                                        </button>
+                                        <button class="btn btn--ghost btn--sm" type="button" :disabled="nameSaving" @click="editingName = false">
+                                            Cancelar
+                                        </button>
+                                    </div>
                                 </form>
-                                <p v-if="nameError" class="modal-error" role="alert">{{ nameError }}</p>
+                                <p v-if="nameError" class="text-error" role="alert">{{ nameError }}</p>
                             </dd>
                         </div>
-                        <div>
+                        <div class="data-row">
                             <dt>E-mail</dt>
                             <dd>{{ myEmail }}</dd>
                         </div>
-                        <div>
+                        <div class="data-row">
                             <dt>Cargo</dt>
                             <dd>{{ myRoleLabel }}</dd>
                         </div>
                     </dl>
+                </article>
 
+                <article class="card panel">
+                    <h2 class="panel-title">Aparência</h2>
+                    <p class="panel-hint">Escolha como o VetFlow aparece para você. “Sistema” segue o modo do seu computador.</p>
+
+                    <div class="theme-options" role="radiogroup" aria-label="Tema da interface">
+                        <button
+                            v-for="option in themeOptions"
+                            :key="option.key"
+                            class="theme-option"
+                            :class="[`theme-option--${option.key}`, { 'is-selected': themePreference === option.key }]"
+                            type="button"
+                            role="radio"
+                            :aria-checked="themePreference === option.key"
+                            @click="themePreference = option.key"
+                        >
+                            <span class="theme-option__preview" aria-hidden="true">
+                                <span class="theme-option__bar"></span>
+                                <span class="theme-option__bar theme-option__bar--short"></span>
+                                <span class="theme-option__dot"></span>
+                            </span>
+                            <span class="theme-option__label">{{ option.label }}</span>
+                        </button>
+                    </div>
+                    <p class="panel-hint panel-hint--small">Tema em uso agora: {{ resolvedTheme === 'dark' ? 'escuro' : 'claro' }}.</p>
+                </article>
+
+                <article class="card panel">
+                    <h2 class="panel-title">Alterar senha</h2>
                     <form class="password-form" @submit.prevent="changePassword">
-                        <h3>Alterar senha</h3>
-                        <label>
+                        <label class="field">
                             Nova senha
-                            <input
-                                v-model="passwordForm.next"
-                                type="password"
-                                autocomplete="new-password"
-                                placeholder="Mínimo de 6 caracteres"
-                            />
+                            <input v-model="passwordForm.next" class="input" type="password" autocomplete="new-password" placeholder="Mínimo de 6 caracteres" />
                         </label>
-                        <label>
+                        <label class="field">
                             Confirmar nova senha
-                            <input
-                                v-model="passwordForm.confirm"
-                                type="password"
-                                autocomplete="new-password"
-                                placeholder="Repita a senha"
-                            />
+                            <input v-model="passwordForm.confirm" class="input" type="password" autocomplete="new-password" placeholder="Repita a senha" />
                         </label>
-                        <p v-if="passwordError" class="modal-error" role="alert">{{ passwordError }}</p>
-                        <p v-if="passwordSuccess" class="success-message" role="status">
-                            {{ passwordSuccess }}
-                        </p>
-                        <button class="primary-button" type="submit" :disabled="passwordSaving">
+                        <p v-if="passwordError" class="text-error" role="alert">{{ passwordError }}</p>
+                        <button class="btn btn--primary" type="submit" :disabled="passwordSaving">
                             {{ passwordSaving ? 'Salvando...' : 'Atualizar senha' }}
                         </button>
                     </form>
                 </article>
+            </div>
 
-                <!-- Equipe -->
-                <article class="panel team-panel">
-                    <div class="panel__header">
-                        <div>
-                            <h2>Equipe</h2>
-                            <p>{{ activeCount }} ativos · {{ team.length }} no total</p>
-                        </div>
-                        <div class="panel__actions">
-                            <div class="period-switcher" role="group" aria-label="Filtrar equipe">
-                                <button
-                                    v-for="item in statusFilters"
-                                    :key="item.key"
-                                    type="button"
-                                    :class="{ active: statusFilter === item.key }"
-                                    @click="statusFilter = item.key"
-                                >
-                                    {{ item.label }}
-                                </button>
-                            </div>
-                            <button
-                                v-if="isAdmin"
-                                class="primary-button"
-                                type="button"
-                                @click="openCreateModal"
-                            >
-                                <span class="plus">+</span>Novo funcionário
-                            </button>
-                        </div>
+            <!-- Equipe -->
+            <article class="card panel team-panel">
+                <div class="panel__header">
+                    <div>
+                        <h2 class="panel-title">Equipe</h2>
+                        <p class="panel-hint">{{ activeCount }} ativos · {{ team.length }} no total</p>
                     </div>
+                    <button v-if="isAdmin" class="btn btn--primary btn--sm" type="button" @click="openCreateModal">
+                        <span aria-hidden="true">+</span> Novo funcionário
+                    </button>
+                </div>
 
-                    <p v-if="loadError" class="modal-error" role="alert">{{ loadError }}</p>
-                    <p v-else-if="loading && !team.length" class="state-message">
-                        Carregando equipe...
-                    </p>
-                    <p v-if="actionError" class="modal-error" role="alert">{{ actionError }}</p>
-                    <p v-if="actionNotice" class="success-message" role="status">{{ actionNotice }}</p>
+                <div class="team-filter">
+                    <div class="segmented" role="group" aria-label="Filtrar equipe">
+                        <button
+                            v-for="item in statusFilters"
+                            :key="item.key"
+                            type="button"
+                            :class="{ 'is-active': statusFilter === item.key }"
+                            :aria-pressed="statusFilter === item.key"
+                            @click="statusFilter = item.key"
+                        >
+                            {{ item.label }}
+                        </button>
+                    </div>
+                </div>
 
-                    <div class="table-scroll">
-                        <table class="team-table">
-                            <thead>
-                                <tr>
-                                    <th>Funcionário</th>
-                                    <th>Cargo</th>
-                                    <th>Contato</th>
-                                    <th>Status</th>
-                                    <th v-if="isAdmin" class="align-right">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr
-                                    v-for="member in filteredTeam"
-                                    :key="member.id"
-                                    :class="{ 'row--inactive': !member.active }"
-                                >
-                                    <td>
-                                        <div class="member-cell">
-                                            <span class="member-avatar" aria-hidden="true">{{
-                                                memberInitials(member.name)
-                                            }}</span>
-                                            <div>
-                                                <strong>{{ member.name }}</strong>
-                                                <span v-if="member.id === session?.user?.id" class="origin">Você</span>
-                                                <small v-if="member.crmv">CRMV {{ member.crmv }}</small>
-                                            </div>
+                <p v-if="loadError" class="text-error" role="alert">{{ loadError }}</p>
+
+                <div v-if="loading && !team.length" class="skeleton-list">
+                    <div v-for="n in 3" :key="n" class="skeleton skeleton-row"></div>
+                </div>
+
+                <div v-else-if="!filteredTeam.length" class="empty-state">
+                    <span class="empty-state__icon" aria-hidden="true">♡</span>
+                    <strong>Nenhum funcionário encontrado</strong>
+                    <span>Ajuste o filtro para ver mais pessoas da equipe.</span>
+                </div>
+
+                <div v-else class="table-wrap">
+                    <table class="table team-table">
+                        <thead>
+                            <tr>
+                                <th>Funcionário</th>
+                                <th>Cargo</th>
+                                <th>Contato</th>
+                                <th>Status</th>
+                                <th v-if="isAdmin" class="align-right">Ações</th>
+                            </tr>
+                        </thead>
+                        <TransitionGroup name="list" tag="tbody">
+                            <tr v-for="member in filteredTeam" :key="member.id" :class="{ 'is-inactive': !member.active }">
+                                <td>
+                                    <div class="member-cell">
+                                        <span class="member-avatar" aria-hidden="true">{{ memberInitials(member.name) }}</span>
+                                        <div class="member-cell__text">
+                                            <strong>
+                                                {{ member.name }}
+                                                <span v-if="member.id === session?.user?.id" class="badge badge--accent badge--mini">Você</span>
+                                            </strong>
+                                            <small v-if="member.crmv">CRMV {{ member.crmv }}</small>
                                         </div>
-                                    </td>
-                                    <td>
-                                        <span class="tag">{{ cargoLabels[member.role] ?? member.role }}</span>
-                                    </td>
-                                    <td>
-                                        {{ member.email || '—' }}
-                                        <small v-if="member.phone" class="sub-line">{{ member.phone }}</small>
-                                    </td>
-                                    <td>
-                                        <span
-                                            class="status"
-                                            :class="member.active ? 'status--paid' : 'status--overdue'"
-                                        >
-                                            {{ member.active ? 'Ativo' : 'Inativo' }}
-                                        </span>
-                                    </td>
-                                    <td v-if="isAdmin" class="align-right actions-cell">
-                                        <button class="pay-button" type="button" @click="openEditModal(member)">
-                                            Editar
-                                        </button>
+                                    </div>
+                                </td>
+                                <td><span class="badge badge--neutral">{{ cargoLabels[member.role] ?? member.role }}</span></td>
+                                <td>
+                                    <span class="contact">{{ member.email || '—' }}</span>
+                                    <small v-if="member.phone" class="sub-line">{{ member.phone }}</small>
+                                </td>
+                                <td>
+                                    <span class="badge" :class="member.active ? 'badge--success' : 'badge--danger'">
+                                        {{ member.active ? 'Ativo' : 'Inativo' }}
+                                    </span>
+                                </td>
+                                <td v-if="isAdmin" class="align-right">
+                                    <div class="row-actions">
+                                        <button class="btn btn--ghost btn--sm" type="button" @click="openEditModal(member)">Editar</button>
                                         <button
                                             v-if="member.id !== session?.user?.id"
-                                            class="pay-button"
+                                            class="btn btn--ghost btn--sm"
                                             type="button"
                                             @click="toggleActive(member)"
                                         >
@@ -462,667 +469,516 @@ onMounted(carregarEquipe)
                                         </button>
                                         <button
                                             v-if="member.id !== session?.user?.id"
-                                            class="pay-button pay-button--danger"
+                                            class="btn btn--danger btn--sm"
                                             type="button"
                                             @click="removeMember(member)"
                                         >
                                             Excluir
                                         </button>
-                                    </td>
-                                </tr>
-                                <tr v-if="!filteredTeam.length && !loading">
-                                    <td :colspan="isAdmin ? 5 : 4" class="empty-row">
-                                        Nenhum funcionário encontrado.
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </article>
-            </section>
-        </main>
+                                    </div>
+                                </td>
+                            </tr>
+                        </TransitionGroup>
+                    </table>
+                </div>
+            </article>
+        </section>
+    </main>
 
-        <div v-if="isModalOpen" class="modal-backdrop" @click.self="closeModal">
-            <form class="modal" @submit.prevent="saveMember">
+    <Transition name="overlay">
+        <div v-if="isModalOpen" class="overlay" @click.self="closeModal">
+            <form class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="member-title" @submit.prevent="saveMember">
                 <button class="modal-close" type="button" aria-label="Fechar" @click="closeModal">×</button>
-                <p class="eyebrow">EQUIPE DA CLÍNICA</p>
-                <h2>{{ editingId ? 'Editar funcionário' : 'Novo funcionário' }}</h2>
+                <p class="eyebrow">Equipe da clínica</p>
+                <h2 id="member-title" class="modal-title">{{ editingId ? 'Editar funcionário' : 'Novo funcionário' }}</h2>
 
-                <label>
-                    Nome completo
-                    <input v-model="memberForm.name" required maxlength="120" placeholder="Ex.: Ana Souza" />
-                </label>
+                <div class="form-stack">
+                    <label class="field">
+                        Nome completo
+                        <input v-model="memberForm.name" class="input" required maxlength="120" placeholder="Ex.: Ana Souza" />
+                    </label>
 
-                <div class="form-row">
-                    <label>
-                        E-mail
+                    <div class="form-row">
+                        <label class="field">
+                            E-mail
+                            <input v-model="memberForm.email" class="input" type="email" required autocomplete="off" placeholder="nome@clinica.com" />
+                        </label>
+                        <label class="field">
+                            Cargo
+                            <select v-model="memberForm.role" class="input">
+                                <option v-for="option in roleOptions" :key="option.value" :value="option.value">
+                                    {{ option.label }}
+                                </option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <label class="field">
+                        {{ editingId ? 'Nova senha (opcional)' : 'Senha inicial' }}
                         <input
-                            v-model="memberForm.email"
-                            type="email"
-                            required
-                            autocomplete="off"
-                            placeholder="nome@clinica.com"
+                            v-model="memberForm.password"
+                            class="input"
+                            type="password"
+                            minlength="6"
+                            autocomplete="new-password"
+                            :required="!editingId"
+                            :placeholder="editingId ? 'Deixe em branco para manter' : 'Mínimo de 6 caracteres'"
                         />
                     </label>
-                    <label>
-                        Cargo
-                        <select v-model="memberForm.role">
-                            <option v-for="option in roleOptions" :key="option.value" :value="option.value">
-                                {{ option.label }}
-                            </option>
-                        </select>
-                    </label>
+
+                    <div v-if="memberForm.role === 'veterinario'" class="form-row">
+                        <label class="field">
+                            CRMV
+                            <input v-model="memberForm.crmv" class="input" required placeholder="Ex.: SP-12345" />
+                        </label>
+                        <label class="field">
+                            Telefone
+                            <input v-model="memberForm.phone" class="input" placeholder="(19) 99999-9999" />
+                        </label>
+                    </div>
                 </div>
 
-                <label>
-                    {{ editingId ? 'Nova senha (opcional)' : 'Senha inicial' }}
-                    <input
-                        v-model="memberForm.password"
-                        type="password"
-                        minlength="6"
-                        autocomplete="new-password"
-                        :required="!editingId"
-                        :placeholder="editingId ? 'Deixe em branco para manter' : 'Mínimo de 6 caracteres'"
-                    />
-                </label>
+                <p v-if="saveError" class="text-error save-error" role="alert">{{ saveError }}</p>
 
-                <div v-if="memberForm.role === 'veterinario'" class="form-row">
-                    <label>
-                        CRMV
-                        <input v-model="memberForm.crmv" required placeholder="Ex.: SP-12345" />
-                    </label>
-                    <label>
-                        Telefone
-                        <input v-model="memberForm.phone" placeholder="(19) 99999-9999" />
-                    </label>
-                </div>
-
-                <p v-if="saveError" class="modal-error" role="alert">{{ saveError }}</p>
-                <button class="primary-button modal-submit" type="submit" :disabled="saving">
-                    {{
-                        saving
-                            ? 'Salvando...'
-                            : editingId
-                              ? 'Salvar alterações'
-                              : 'Cadastrar funcionário'
-                    }}
+                <button class="btn btn--primary btn--block submit" type="submit" :disabled="saving">
+                    <span v-if="saving" class="spinner" aria-hidden="true"></span>
+                    {{ saving ? 'Salvando...' : editingId ? 'Salvar alterações' : 'Cadastrar funcionário' }}
                 </button>
             </form>
         </div>
-    </div>
+    </Transition>
 </template>
 
 <style scoped>
 .profile-page {
-    --ink: #183b3a;
-    --muted: #728682;
-    --line: #e0e9e1;
-    --cream: #fffefa;
-    min-height: 100vh;
-    color: var(--ink);
-    background: #f3f5f1;
-}
-
-.profile-content {
-    width: min(100% - 48px, 1380px);
-    margin: 0 auto;
-    padding: 32px 0 64px;
-}
-
-.profile-heading {
     display: flex;
-    align-items: end;
-    justify-content: space-between;
-    gap: 32px;
-    margin-bottom: 34px;
+    flex-direction: column;
+    gap: 22px;
 }
 
-.eyebrow {
-    margin: 0 0 10px;
-    color: #789575;
-    font-size: 0.55rem;
-    font-weight: 800;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-}
-
-.profile-heading h1 {
-    margin: 0;
-    color: #1d1f1fd0;
-    font-size: clamp(1.9rem, 3vw, 2rem);
-    font-weight: 800;
-    line-height: 1;
-}
-
-.heading-description {
-    max-width: 550px;
-    margin: 10px 0 0;
-    color: var(--muted);
-    font-size: 0.82rem;
-    line-height: 1.6;
+.page-header {
+    margin-bottom: 0;
 }
 
 .profile-grid {
     display: grid;
-    grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+    grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.4fr);
+    gap: 18px;
     align-items: start;
-    gap: 28px;
+}
+
+.stack {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
 }
 
 .panel {
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: var(--cream);
-    box-shadow: 0 12px 35px #1a554a09;
     padding: 24px 26px;
+}
+
+.panel-title {
+    color: var(--ink);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+}
+
+.panel-hint {
+    margin: 5px 0 0;
+    color: var(--muted);
+    font-size: 0.7rem;
+    line-height: 1.55;
+}
+
+.panel-hint--small {
+    margin-top: 14px;
+    font-size: 0.64rem;
 }
 
 .panel__header {
     display: flex;
-    align-items: center;
+    flex-wrap: wrap;
+    align-items: flex-start;
     justify-content: space-between;
+    gap: 14px;
+}
+
+/* Cartão "Meu perfil" */
+
+.me-card {
+    padding: 26px;
+    background:
+        linear-gradient(160deg, var(--accent-soft), transparent 60%),
+        var(--surface);
+}
+
+.me-head {
+    display: flex;
+    align-items: center;
     gap: 16px;
     margin-bottom: 22px;
 }
 
-.panel__header h2 {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 800;
-    color: #252929d0;
-}
-
-.panel__header p {
-    margin: 4px 0 0;
-    color: var(--muted);
-    font-size: 0.7rem;
-}
-
-.panel__actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-/* Botões */
-.primary-button {
-    border: 0;
-    border-radius: 10px;
-    padding: 10px 20px;
-    color: #fff;
-    background: #31572c;
-    box-shadow: 0 9px 20px #31572c24;
-    cursor: pointer;
-    font: inherit;
-    font-size: 0.74rem;
-    font-weight: 800;
-    white-space: nowrap;
-    transition: transform 0.2s, background 0.2s;
-}
-
-.primary-button:hover {
-    background: #264a24;
-    transform: translateY(-2px);
-}
-
-.primary-button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.plus {
-    margin-right: 8px;
-    font-size: 1.2rem;
-    vertical-align: -1px;
-}
-
-.period-switcher {
-    display: flex;
-    padding: 3px;
-    border-radius: 9px;
-    background: #eef3ed;
-}
-
-.period-switcher button {
-    border: 0;
-    border-radius: 7px;
-    padding: 9px 18px;
-    color: var(--muted);
-    background: transparent;
-    cursor: pointer;
-    font: inherit;
-    font-size: 0.68rem;
-    font-weight: 800;
-    transition: background 0.2s, color 0.2s;
-}
-
-.period-switcher button.active {
-    color: var(--ink);
-    background: #fff;
-    box-shadow: 0 2px 6px rgba(24, 59, 58, 0.1);
-}
-
-.pay-button {
-    margin-left: 6px;
-    border: 1px solid var(--line);
-    border-radius: 7px;
-    padding: 5px 10px;
-    color: #31572c;
-    background: #fff;
-    cursor: pointer;
-    font: inherit;
-    font-size: 0.62rem;
-    font-weight: 800;
-}
-
-.pay-button:hover {
-    background: #eef3ed;
-}
-
-.pay-button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-.pay-button--danger {
-    color: #b9533d;
-}
-
-.pay-button--danger:hover {
-    background: #f9ebe7;
-}
-
-.link-button {
-    margin-left: 8px;
-    border: 0;
-    padding: 0;
-    color: #3f8f8a;
-    background: none;
-    cursor: pointer;
-    font: inherit;
-    font-size: 0.66rem;
-    font-weight: 800;
-}
-
-.link-button:hover {
-    text-decoration: underline;
-}
-
-/* Meus dados */
-.me-header {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin-bottom: 24px;
-}
-
 .me-avatar {
-    width: 56px;
-    height: 56px;
-    flex: 0 0 56px;
     display: grid;
     place-items: center;
-    border: 1px solid #c3d7cf;
-    border-radius: 50%;
-    color: #31572c;
-    background: #e5efe2;
-    font-size: 1rem;
+    width: 62px;
+    height: 62px;
+    flex: 0 0 auto;
+    border-radius: 20px;
+    color: var(--accent-ink);
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+    box-shadow: 0 12px 24px -12px var(--accent);
+    font-size: 1.1rem;
     font-weight: 800;
+    transition: transform 0.4s var(--ease);
 }
 
-.me-identity {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
+.me-card:hover .me-avatar {
+    transform: rotate(-5deg);
 }
 
 .me-identity h2 {
-    margin: 0;
-    font-size: 1.05rem;
-    font-weight: 800;
-    color: #252929d0;
-    overflow-wrap: anywhere;
+    color: var(--ink);
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: -0.035em;
+}
+
+.me-identity .badge {
+    margin-top: 7px;
 }
 
 .data-list {
-    margin: 0 0 26px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
-.data-list dt {
-    margin-bottom: 5px;
-    color: #7e908c;
-    font-size: 0.62rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-}
-
-.data-list dd {
     margin: 0;
-    color: #252929d0;
-    font-size: 0.8rem;
-    font-weight: 700;
-    overflow-wrap: anywhere;
+    padding: 0;
 }
 
-.inline-form {
-    display: flex;
-    flex-wrap: wrap;
+.data-row {
+    display: grid;
+    grid-template-columns: 90px minmax(0, 1fr);
     align-items: center;
-    gap: 6px;
-}
-
-.inline-form input {
-    flex: 1 1 140px;
-    min-width: 0;
-}
-
-.password-form {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding-top: 22px;
+    gap: 14px;
+    padding: 13px 0;
     border-top: 1px solid var(--line);
 }
 
-.password-form h3 {
-    margin: 0;
-    font-size: 0.86rem;
-    font-weight: 800;
-    color: #252929d0;
-}
-
-.password-form .primary-button {
-    align-self: flex-start;
-}
-
-.password-form label,
-.modal label {
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
+.data-row dt {
     color: var(--muted);
-    font-size: 0.68rem;
-    font-weight: 700;
-}
-
-.password-form input,
-.inline-form input,
-.modal input,
-.modal select {
-    border: 1px solid var(--line);
-    border-radius: 9px;
-    padding: 11px 12px;
-    color: var(--ink);
-    background: #fff;
-    font: inherit;
-    font-size: 0.78rem;
-    outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.password-form input:focus,
-.inline-form input:focus,
-.modal input:focus,
-.modal select:focus {
-    border-color: #99b55f;
-    box-shadow: 0 0 0 3px rgba(153, 181, 95, 0.2);
-}
-
-/* Tabela da equipe */
-.table-scroll {
-    overflow-x: auto;
-}
-
-.team-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.74rem;
-}
-
-.team-table th {
-    padding: 0 12px 12px;
-    border-bottom: 1px solid var(--line);
-    color: #7e908c;
-    font-size: 0.62rem;
-    font-weight: 700;
-    text-align: left;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-}
-
-.team-table td {
-    padding: 14px 12px;
-    border-bottom: 1px solid #edf1ec;
-    color: #6c7d7a;
-    white-space: nowrap;
-    vertical-align: middle;
-}
-
-.team-table tbody tr {
-    transition: background 0.2s;
-}
-
-.team-table tbody tr:hover {
-    background: #f7f9f5;
-}
-
-.team-table tbody tr:last-child td {
-    border-bottom: 0;
-}
-
-.row--inactive {
-    opacity: 0.7;
-}
-
-.align-right {
-    text-align: right !important;
-}
-
-.actions-cell {
-    white-space: nowrap;
-}
-
-.member-cell {
-    display: flex;
-    align-items: center;
-    gap: 11px;
-}
-
-.member-cell strong {
-    color: #252929d0;
-    font-weight: 700;
-}
-
-.member-cell small,
-.sub-line {
-    display: block;
-    margin-top: 3px;
-    color: #9aac9e;
-    font-size: 0.6rem;
-    font-weight: 600;
-}
-
-.member-avatar {
-    width: 32px;
-    height: 32px;
-    flex: 0 0 32px;
-    display: grid;
-    place-items: center;
-    border-radius: 50%;
-    color: #31572c;
-    background: #e5efe2;
-    font-size: 0.6rem;
-    font-weight: 800;
-}
-
-.origin {
-    margin-left: 8px;
-    padding: 2px 7px;
-    border-radius: 20px;
-    color: #3f8f8a;
-    background: #e3f1ef;
-    font-size: 0.58rem;
-    font-weight: 800;
-}
-
-.tag {
-    padding: 4px 10px;
-    border-radius: 20px;
-    background: #eef3ed;
-    color: #31572c;
     font-size: 0.64rem;
     font-weight: 700;
 }
 
-.status {
-    display: inline-flex;
+.data-row dd {
+    display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 0.66rem;
-    font-weight: 800;
-}
-
-.status::before {
-    width: 7px;
-    height: 7px;
-    content: '';
-    border-radius: 50%;
-    background: currentColor;
-}
-
-.status--paid {
-    color: #2f7d73;
-}
-
-.status--overdue {
-    color: #b9533d;
-}
-
-.empty-row {
-    padding: 28px 12px !important;
-    text-align: center;
-    color: var(--muted);
-}
-
-.state-message {
-    margin: 0 0 16px;
-    color: var(--muted);
-    font-size: 0.8rem;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0;
+    color: var(--ink);
+    font-size: 0.74rem;
     font-weight: 600;
+    word-break: break-word;
 }
 
-.modal-error {
-    margin: 0;
-    color: #b9533d;
-    font-size: 0.74rem;
-    font-weight: 700;
+.data-row__edit {
+    display: block !important;
 }
 
-.success-message {
-    margin: 0;
-    color: #2f7d73;
-    font-size: 0.74rem;
-    font-weight: 700;
+.inline-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
 }
 
-/* Modal */
-.modal-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 50;
+.inline-form__actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* Aparência */
+
+.theme-options {
     display: grid;
-    place-items: center;
-    padding: 20px;
-    overflow-y: auto;
-    background: rgba(24, 59, 58, 0.35);
-    backdrop-filter: blur(3px);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 18px;
 }
 
-.modal {
+.theme-option {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+    border: 1.5px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface-2);
+    text-align: left;
+    transition: border-color 0.25s, transform 0.25s var(--ease), box-shadow 0.25s;
+}
+
+.theme-option:hover {
+    transform: translateY(-2px);
+    border-color: var(--line-strong);
+}
+
+.theme-option.is-selected {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.theme-option__label {
+    padding: 0 4px 2px;
+    color: var(--ink);
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.theme-option__preview {
     position: relative;
-    width: min(100%, 480px);
+    display: block;
+    height: 64px;
+    border-radius: 9px;
+    overflow: hidden;
+    background: #f4f6f1;
+    box-shadow: inset 0 0 0 1px rgba(24, 59, 58, 0.08);
+}
+
+.theme-option__preview::before {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    content: '';
+}
+
+.theme-option__bar {
+    position: absolute;
+    top: 12px;
+    left: 10px;
+    width: 58%;
+    height: 7px;
+    border-radius: 4px;
+    background: #31572c;
+}
+
+.theme-option__bar--short {
+    top: 26px;
+    width: 38%;
+    background: #c9d6c6;
+}
+
+.theme-option__dot {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #e5efdf;
+}
+
+.theme-option--dark .theme-option__preview {
+    background: #0c1615;
+}
+
+.theme-option--dark .theme-option__bar {
+    background: #8fbd73;
+}
+
+.theme-option--dark .theme-option__bar--short {
+    background: #35564f;
+}
+
+.theme-option--dark .theme-option__dot {
+    background: #1c3431;
+}
+
+/* Preview "Sistema": metade clara, metade escura */
+
+.theme-option--system .theme-option__preview {
+    background: linear-gradient(90deg, #f4f6f1 50%, #0c1615 50%);
+}
+
+.theme-option--system .theme-option__bar {
+    background: #31572c;
+}
+
+.theme-option--system .theme-option__bar--short {
+    background: #35564f;
+}
+
+.theme-option--system .theme-option__dot {
+    background: #1c3431;
+}
+
+/* Formulários */
+
+.password-form {
     display: flex;
     flex-direction: column;
     gap: 14px;
-    margin: auto;
-    padding: 30px;
-    border-radius: 16px;
-    background: var(--cream);
-    box-shadow: 0 24px 60px rgba(24, 59, 58, 0.25);
+    margin-top: 18px;
 }
 
-.modal h2 {
-    margin: 0 0 4px;
-    font-size: 1.3rem;
+.password-form .btn {
+    align-self: flex-start;
 }
 
-.modal-close {
-    position: absolute;
-    top: 14px;
-    right: 16px;
-    border: 0;
-    background: none;
-    color: var(--muted);
-    cursor: pointer;
-    font-size: 1.6rem;
+.form-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
 }
 
 .form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+.modal-title {
+    margin: 0 0 22px;
+    padding-right: 28px;
+    color: var(--ink);
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: -0.05em;
+}
+
+.save-error {
+    margin: 14px 0 0;
+}
+
+.submit {
+    margin-top: 22px;
+}
+
+.spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Equipe */
+
+.team-filter {
+    margin: 18px 0 6px;
+}
+
+.skeleton-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.skeleton-row {
+    height: 56px;
+}
+
+.team-table {
+    margin-top: 6px;
+}
+
+.team-table tr.is-inactive td {
+    opacity: 0.6;
+}
+
+.member-cell {
+    display: flex;
+    align-items: center;
     gap: 12px;
 }
 
-.modal-submit {
-    margin-top: 6px;
-    padding: 13px;
+.member-avatar {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    color: var(--accent-soft-ink);
+    background: var(--accent-soft);
+    font-size: 0.66rem;
+    font-weight: 800;
 }
 
-@media (max-width: 1000px) {
+.member-cell__text strong {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: var(--ink);
+    font-size: 0.74rem;
+}
+
+.member-cell__text small,
+.sub-line {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 0.62rem;
+}
+
+.badge--mini {
+    padding: 2px 7px;
+    font-size: 0.52rem;
+}
+
+.contact {
+    color: var(--ink-2);
+    font-size: 0.72rem;
+}
+
+.row-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.table-wrap {
+    margin-top: 4px;
+}
+
+.list-enter-active,
+.list-leave-active {
+    transition: opacity 0.3s var(--ease), transform 0.3s var(--ease);
+}
+
+@media (max-width: 1080px) {
     .profile-grid {
         grid-template-columns: 1fr;
     }
 }
 
-@media (max-width: 760px) {
-    .profile-content {
-        width: min(100% - 32px, 1220px);
-        padding-top: 36px;
+@media (max-width: 680px) {
+    .data-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
     }
 
-    .panel__header,
-    .panel__actions {
-        align-items: flex-start;
-        flex-direction: column;
+    .theme-options {
+        gap: 8px;
     }
 
-    .panel__actions {
-        width: 100%;
-    }
-
-    .panel__actions .primary-button {
-        width: 100%;
-    }
-}
-
-@media (max-width: 480px) {
     .form-row {
         grid-template-columns: 1fr;
     }
 
     .panel {
-        padding: 20px 18px;
-    }
-
-    .modal {
-        padding: 25px 20px;
+        padding: 20px 17px;
     }
 }
 </style>

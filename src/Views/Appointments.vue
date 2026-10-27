@@ -1,260 +1,10 @@
-<template>
-  <TopBar />
-  <main class="appointments-page">
-    <header class="page-header">
-      <div>
-        <p class="eyebrow">CLÍNICA VETERINÁRIA</p>
-        <h1>Agendamentos</h1>
-        <p class="page-subtitle">Cadastre tutores e pacientes e organize os atendimentos da clínica.</p>
-      </div>
-      <button class="btn btn-light" type="button" @click="novoAgendamento">
-        <span aria-hidden="true">＋</span> Novo agendamento
-      </button>
-    </header>
-
-    <div v-if="mensagem.texto" class="notice" :class="mensagem.tipo" role="status">
-      {{ mensagem.texto }}
-      <button type="button" aria-label="Fechar aviso" @click="mensagem.texto = ''">×</button>
-    </div>
-
-    <section class="panel">
-      <div class="panel-heading">
-        <div>
-          <h2>{{ editandoId ? 'Editar agendamento' : 'Novo agendamento' }}</h2>
-          <p>Preencha os dados do tutor, do pet e do atendimento.</p>
-        </div>
-        <span class="step-tag">1 · Cadastro</span>
-      </div>
-
-      <form @submit.prevent="salvarAgendamento">
-        <div class="section-title">
-          <span class="section-icon">♙</span>
-          <div>
-            <h3>Dados do tutor</h3>
-            <p>Selecione um tutor cadastrado ou informe os dados de um novo.</p>
-          </div>
-        </div>
-
-        <div class="form-grid">
-          <label class="field field-wide">
-            <span>Tutor cadastrado</span>
-            <select v-model="tutorSelecionadoId" @change="selecionarTutor">
-              <option value="">＋ Cadastrar novo tutor</option>
-              <option v-for="tutor in tutores" :key="tutor.id" :value="tutor.id">
-                {{ tutor.nome }}{{ tutor.cpf ? ` — ${tutor.cpf}` : '' }}
-              </option>
-            </select>
-          </label>
-          <label class="field">
-            <span>Nome completo *</span>
-            <input v-model.trim="formTutor.nome" required maxlength="150" placeholder="Nome do tutor" />
-          </label>
-          <label class="field">
-            <span>CPF</span>
-            <input v-model.trim="formTutor.cpf" inputmode="numeric" placeholder="000.000.000-00" />
-          </label>
-          <label class="field">
-            <span>Telefone</span>
-            <input v-model.trim="formTutor.telefone" type="tel" placeholder="(00) 00000-0000" />
-          </label>
-          <label class="field">
-            <span>E-mail</span>
-            <input v-model.trim="formTutor.email" type="email" placeholder="email@exemplo.com" />
-          </label>
-        </div>
-
-        <div class="section-title section-spaced">
-          <span class="section-icon">♡</span>
-          <div>
-            <h3>Dados do paciente (pet)</h3>
-            <p>O paciente será vinculado ao tutor informado acima.</p>
-          </div>
-        </div>
-
-        <div class="form-grid">
-          <label class="field field-wide">
-            <span>Pet cadastrado</span>
-            <select v-model="pacienteSelecionadoId" :disabled="!tutorSelecionadoId" @change="selecionarPaciente">
-              <option value="">＋ Cadastrar novo pet</option>
-              <option v-for="pet in pacientesDoTutor" :key="pet.id" :value="pet.id">
-                {{ pet.nome }}{{ pet.especie ? ` — ${pet.especie}` : '' }}
-              </option>
-            </select>
-          </label>
-          <label class="field">
-            <span>Nome do pet *</span>
-            <input v-model.trim="formPaciente.nome" required maxlength="120" placeholder="Nome do animal" />
-          </label>
-          <label class="field">
-            <span>Espécie</span>
-            <select v-model="formPaciente.especie">
-              <option value="">Selecione</option>
-              <option>Cão</option>
-              <option>Gato</option>
-              <option> Ave </option>
-              <option>Roedor</option>
-              <option>Réptil</option>
-              <option>Outro</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>Raça</span>
-            <input v-model.trim="formPaciente.raca" placeholder="Raça do pet" />
-          </label>
-          <label class="field">
-            <span>Data de nascimento</span>
-            <input v-model="formPaciente.data_nascimento" type="date" />
-          </label>
-          <label class="field">
-            <span>Sexo</span>
-            <select v-model="formPaciente.sexo">
-              <option value="">Não informado</option>
-              <option value="Macho">Macho</option>
-              <option value="Fêmea">Fêmea</option>
-            </select>
-          </label>
-          <label class="field">
-            <span>Peso atual (kg)</span>
-            <input v-model="formPaciente.peso_atual" type="number" min="0" step="0.01" placeholder="0,00" />
-          </label>
-          <label class="field checkbox-field">
-            <input v-model="formPaciente.castrado" type="checkbox" />
-            <span>Castrado(a)</span>
-          </label>
-          <label class="field field-full">
-            <span>Alergias e observações importantes</span>
-            <textarea v-model.trim="formPaciente.alergias" rows="2" placeholder="Informe alergias conhecidas ou observações"></textarea>
-          </label>
-        </div>
-
-        <div class="section-title section-spaced">
-          <span class="section-icon">▦</span>
-          <div>
-            <h3>Informações do agendamento</h3>
-            <p>Defina quando o atendimento acontecerá e o motivo da visita.</p>
-          </div>
-        </div>
-
-        <div class="form-grid">
-          <label class="field">
-            <span>Data *</span>
-            <input v-model="formAtendimento.data" type="date" required />
-          </label>
-          <label class="field">
-            <span>Horário *</span>
-            <input v-model="formAtendimento.horario" type="time" required />
-          </label>
-          <label class="field">
-            <span>Veterinário responsável</span>
-            <select v-model="formAtendimento.veterinario_id">
-              <option value="">A definir</option>
-              <option v-for="vet in veterinarios" :key="vet.id" :value="vet.id">
-                {{ vet.nome }} — CRMV {{ vet.crmv }}
-              </option>
-            </select>
-          </label>
-          <label class="field">
-            <span>Status</span>
-            <select v-model="formAtendimento.status">
-              <option>Agendado</option>
-              <option>Em andamento</option>
-              <option>Concluído</option>
-              <option>Cancelado</option>
-            </select>
-          </label>
-          <label class="field field-full">
-            <span>Motivo da visita</span>
-            <textarea v-model.trim="formAtendimento.motivo_visita" rows="2" placeholder="Ex.: consulta de rotina, vacinação, retorno..."></textarea>
-          </label>
-        </div>
-
-        <div class="form-actions">
-          <button class="btn btn-secondary" type="button" @click="limparFormulario">Limpar</button>
-          <button class="btn btn-primary" type="submit" :disabled="salvando">
-            {{ salvando ? 'Salvando...' : editandoId ? 'Salvar alterações' : 'Cadastrar agendamento' }}
-          </button>
-        </div>
-      </form>
-    </section>
-
-    <section class="panel list-panel">
-      <div class="panel-heading list-heading">
-        <div>
-          <h2>Agendamentos realizados</h2>
-          <p>Consulte, edite ou exclua os atendimentos cadastrados.</p>
-        </div>
-        <span class="count-pill">{{ atendimentosFiltrados.length }} registro(s)</span>
-      </div>
-
-      <div class="filters">
-        <label class="field">
-          <span>Buscar tutor ou pet</span>
-          <input v-model.trim="filtroTexto" placeholder="Digite um nome..." />
-        </label>
-        <label class="field">
-          <span>Data</span>
-          <input v-model="filtroData" type="date" />
-        </label>
-        <label class="field">
-          <span>Status</span>
-          <select v-model="filtroStatus">
-            <option value="">Todos os status</option>
-            <option>Agendado</option>
-            <option>Em andamento</option>
-            <option>Concluído</option>
-            <option>Cancelado</option>
-          </select>
-        </label>
-        <button class="btn btn-secondary filter-clear" type="button" @click="limparFiltros">Limpar filtros</button>
-      </div>
-
-      <div v-if="carregando" class="empty-state">Carregando agendamentos...</div>
-      <div v-else-if="!atendimentosFiltrados.length" class="empty-state">
-        <span class="empty-icon">♡</span>
-        <strong>Nenhum agendamento encontrado</strong>
-        <span>Cadastre um atendimento ou altere os filtros da busca.</span>
-      </div>
-      <div v-else class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Data e horário</th>
-              <th>Pet</th>
-              <th>Tutor</th>
-              <th>Veterinário</th>
-              <th>Status</th>
-              <th class="actions-column">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in atendimentosFiltrados" :key="item.id">
-              <td>
-                <strong>{{ formatarData(item.data_entrada) }}</strong>
-                <small>{{ formatarHora(item.data_entrada) }}</small>
-              </td>
-              <td>
-                <strong>{{ item.paciente?.nome || 'Paciente não encontrado' }}</strong>
-                <small>{{ item.paciente?.especie || 'Espécie não informada' }}</small>
-              </td>
-              <td>{{ item.paciente?.tutor?.nome || 'Tutor não encontrado' }}</td>
-              <td>{{ item.veterinario?.nome || 'A definir' }}</td>
-              <td><span class="status" :class="classeStatus(item.status)">{{ item.status }}</span></td>
-              <td class="row-actions">
-                <button class="icon-btn" type="button" title="Editar atendimento" @click="editarAgendamento(item)">✎</button>
-                <button class="icon-btn danger" type="button" title="Excluir atendimento" @click="excluirAgendamento(item)">⌫</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-  </main>
-</template>
-
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
-import TopBar from "../components/TopBar.vue";
-import { supabase } from "../lib/supabase";
+import TopBar from '../components/TopBar.vue'
+import { canCreateAppointment, canDeleteAppointment } from '../stores/auth'
+import { askConfirm } from '../stores/confirm'
+import { supabase } from '../lib/supabase'
+import { notify } from '../stores/toast'
 
 const tutores = ref([])
 const pacientesDoTutor = ref([])
@@ -268,7 +18,6 @@ const pacienteSelecionadoId = ref('')
 const filtroTexto = ref('')
 const filtroData = ref('')
 const filtroStatus = ref('')
-const mensagem = reactive({ texto: '', tipo: 'success' })
 
 const tutorVazio = () => ({ nome: '', cpf: '', telefone: '', email: '' })
 const pacienteVazio = () => ({
@@ -281,6 +30,8 @@ const atendimentoVazio = () => ({
 const formTutor = reactive(tutorVazio())
 const formPaciente = reactive(pacienteVazio())
 const formAtendimento = reactive(atendimentoVazio())
+
+const statusOptions = ['Agendado', 'Em andamento', 'Concluído', 'Cancelado']
 
 const atendimentosFiltrados = computed(() => {
   const termo = filtroTexto.value.toLocaleLowerCase('pt-BR')
@@ -297,13 +48,25 @@ const atendimentosFiltrados = computed(() => {
   })
 })
 
+const temFiltros = computed(() => Boolean(filtroTexto.value || filtroData.value || filtroStatus.value))
+
+const editandoPet = computed(() => formPaciente.nome || 'este atendimento')
+
+const initials = (name = '') =>
+  name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join('') || '—'
+
+// Erros de formulário aparecem como notificação; sucessos também
 function avisar(texto, tipo = 'success') {
-  mensagem.texto = texto
-  mensagem.tipo = tipo
+  notify(texto, tipo === 'error' ? 'error' : 'success')
 }
 
 function dataHoraLocal(data, horario) {
-  // Cria a data usando o fuso local, evitando deslocamento de dia no campo datetime-local.
+  // Cria a data usando o fuso local, evitando deslocamento de dia
   return new Date(`${data}T${horario}:00`).toISOString()
 }
 
@@ -320,14 +83,13 @@ function formatarHora(valor) {
   })
 }
 
-function classeStatus(status) {
-  return {
-    'status-scheduled': status === 'Agendado',
-    'status-progress': status === 'Em andamento',
-    'status-done': status === 'Concluído',
-    'status-cancelled': status === 'Cancelado'
-  }
-}
+const statusClass = (status) =>
+  ({
+    Agendado: 'badge--accent',
+    'Em andamento': 'badge--warn',
+    'Concluído': 'badge--success',
+    Cancelado: 'badge--danger'
+  })[status] ?? 'badge--neutral'
 
 async function carregarDados() {
   carregando.value = true
@@ -531,7 +293,13 @@ async function editarAgendamento(item) {
 }
 
 async function excluirAgendamento(item) {
-  const confirmado = window.confirm(`Deseja excluir o atendimento de ${item.paciente?.nome || 'este paciente'}? Os dados do tutor e do pet serão mantidos.`)
+  const confirmado = await askConfirm({
+    title: 'Excluir este atendimento?',
+    message: `O atendimento de ${item.paciente?.nome || 'este paciente'} será removido. Os dados do tutor e do pet serão mantidos.`,
+    confirmLabel: 'Excluir',
+    cancelLabel: 'Manter',
+    danger: true
+  })
   if (!confirmado) return
   try {
     const { error } = await supabase.from('atendimentos').delete().eq('id', item.id)
@@ -568,157 +336,686 @@ function limparFiltros() {
 onMounted(carregarDados)
 </script>
 
+<template>
+  <TopBar />
+
+  <main class="page appointments-page">
+    <header class="page-header">
+      <div>
+        <p class="eyebrow">Clínica veterinária</p>
+        <h1 class="page-title">Atendimentos</h1>
+        <p class="page-subtitle">
+          {{ canCreateAppointment
+            ? 'Cadastre tutores e pacientes e organize os atendimentos da clínica.'
+            : 'Consulte os atendimentos registrados na clínica.' }}
+        </p>
+      </div>
+      <button v-if="canCreateAppointment" class="btn btn--primary" type="button" @click="novoAgendamento">
+        <span aria-hidden="true">+</span> Novo agendamento
+      </button>
+    </header>
+
+    <!-- Formulário: somente administração e recepção cadastram -->
+    <section v-if="canCreateAppointment" class="card form-card" :class="{ 'is-editing': editandoId }" aria-labelledby="form-title">
+      <div class="form-card__head">
+        <div>
+          <h2 id="form-title">{{ editandoId ? 'Editar agendamento' : 'Novo agendamento' }}</h2>
+          <p>Preencha os dados do tutor, do pet e do atendimento.</p>
+        </div>
+        <span class="badge" :class="editandoId ? 'badge--warn' : 'badge--accent'">
+          {{ editandoId ? 'Editando' : 'Cadastro' }}
+        </span>
+      </div>
+
+      <Transition name="page">
+        <div v-if="editandoId" class="editing-banner" role="status">
+          <span>Você está editando o atendimento de <strong>{{ editandoPet }}</strong>.</span>
+          <button class="btn btn--ghost btn--sm" type="button" @click="limparFormulario">Cancelar edição</button>
+        </div>
+      </Transition>
+
+      <form class="form-body" @submit.prevent="salvarAgendamento">
+        <fieldset class="form-section">
+          <legend class="form-section__title">
+            <span class="section-icon" aria-hidden="true">♙</span>
+            Dados do tutor
+          </legend>
+          <p class="form-section__hint">Selecione um tutor cadastrado ou informe os dados de um novo.</p>
+
+          <div class="form-grid">
+            <label class="field field--wide">
+              Tutor cadastrado
+              <select v-model="tutorSelecionadoId" class="input" @change="selecionarTutor">
+                <option value="">＋ Cadastrar novo tutor</option>
+                <option v-for="tutor in tutores" :key="tutor.id" :value="tutor.id">
+                  {{ tutor.nome }}{{ tutor.cpf ? ` — ${tutor.cpf}` : '' }}
+                </option>
+              </select>
+            </label>
+            <label class="field">
+              Nome completo *
+              <input v-model.trim="formTutor.nome" class="input" required maxlength="150" placeholder="Nome do tutor" />
+            </label>
+            <label class="field">
+              CPF
+              <input v-model.trim="formTutor.cpf" class="input" inputmode="numeric" placeholder="000.000.000-00" />
+            </label>
+            <label class="field">
+              Telefone
+              <input v-model.trim="formTutor.telefone" class="input" type="tel" placeholder="(00) 00000-0000" />
+            </label>
+            <label class="field">
+              E-mail
+              <input v-model.trim="formTutor.email" class="input" type="email" placeholder="email@exemplo.com" />
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+          <legend class="form-section__title">
+            <span class="section-icon" aria-hidden="true">♡</span>
+            Dados do paciente (pet)
+          </legend>
+          <p class="form-section__hint">O paciente será vinculado ao tutor informado acima.</p>
+
+          <div class="form-grid">
+            <label class="field field--wide">
+              Pet cadastrado
+              <select v-model="pacienteSelecionadoId" class="input" :disabled="!tutorSelecionadoId" @change="selecionarPaciente">
+                <option value="">＋ Cadastrar novo pet</option>
+                <option v-for="pet in pacientesDoTutor" :key="pet.id" :value="pet.id">
+                  {{ pet.nome }}{{ pet.especie ? ` — ${pet.especie}` : '' }}
+                </option>
+              </select>
+            </label>
+            <label class="field">
+              Nome do pet *
+              <input v-model.trim="formPaciente.nome" class="input" required maxlength="120" placeholder="Nome do animal" />
+            </label>
+            <label class="field">
+              Espécie
+              <select v-model="formPaciente.especie" class="input">
+                <option value="">Selecione</option>
+                <option>Cão</option>
+                <option>Gato</option>
+                <option>Ave</option>
+                <option>Roedor</option>
+                <option>Réptil</option>
+                <option>Outro</option>
+              </select>
+            </label>
+            <label class="field">
+              Raça
+              <input v-model.trim="formPaciente.raca" class="input" placeholder="Raça do pet" />
+            </label>
+            <label class="field">
+              Data de nascimento
+              <input v-model="formPaciente.data_nascimento" class="input" type="date" />
+            </label>
+            <label class="field">
+              Sexo
+              <select v-model="formPaciente.sexo" class="input">
+                <option value="">Não informado</option>
+                <option value="Macho">Macho</option>
+                <option value="Fêmea">Fêmea</option>
+              </select>
+            </label>
+            <label class="field">
+              Peso atual (kg)
+              <input v-model="formPaciente.peso_atual" class="input" type="number" min="0" step="0.01" placeholder="0,00" />
+            </label>
+            <label class="check">
+              <input v-model="formPaciente.castrado" type="checkbox" />
+              <span class="check__box" aria-hidden="true"></span>
+              Castrado(a)
+            </label>
+            <label class="field field--full">
+              Alergias e observações importantes
+              <textarea v-model.trim="formPaciente.alergias" class="input input--area" rows="2" placeholder="Informe alergias conhecidas ou observações"></textarea>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+          <legend class="form-section__title">
+            <span class="section-icon" aria-hidden="true">▦</span>
+            Informações do agendamento
+          </legend>
+          <p class="form-section__hint">Defina quando o atendimento acontecerá e o motivo da visita.</p>
+
+          <div class="form-grid">
+            <label class="field">
+              Data *
+              <input v-model="formAtendimento.data" class="input" type="date" required />
+            </label>
+            <label class="field">
+              Horário *
+              <input v-model="formAtendimento.horario" class="input" type="time" required />
+            </label>
+            <label class="field">
+              Veterinário responsável
+              <select v-model="formAtendimento.veterinario_id" class="input">
+                <option value="">A definir</option>
+                <option v-for="vet in veterinarios" :key="vet.id" :value="vet.id">
+                  {{ vet.nome }} — CRMV {{ vet.crmv }}
+                </option>
+              </select>
+            </label>
+            <label class="field">
+              Status
+              <select v-model="formAtendimento.status" class="input">
+                <option v-for="status in statusOptions" :key="status">{{ status }}</option>
+              </select>
+            </label>
+            <label class="field field--full">
+              Motivo da visita
+              <textarea v-model.trim="formAtendimento.motivo_visita" class="input input--area" rows="2" placeholder="Ex.: consulta de rotina, vacinação, retorno..."></textarea>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="form-actions">
+          <button class="btn btn--secondary" type="button" @click="limparFormulario">Limpar</button>
+          <button class="btn btn--primary" type="submit" :disabled="salvando">
+            <span v-if="salvando" class="spinner" aria-hidden="true"></span>
+            {{ salvando ? 'Salvando...' : editandoId ? 'Salvar alterações' : 'Cadastrar agendamento' }}
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Lista de atendimentos -->
+    <section class="card list-card" aria-labelledby="list-title">
+      <div class="list-card__head">
+        <div>
+          <h2 id="list-title">Atendimentos registrados</h2>
+          <p>{{ canCreateAppointment ? 'Consulte, edite ou exclua os atendimentos.' : 'Consulte os atendimentos da clínica.' }}</p>
+        </div>
+        <span class="badge badge--neutral count">{{ atendimentosFiltrados.length }} registro(s)</span>
+      </div>
+
+      <div class="filters">
+        <label class="field filters__search">
+          Buscar tutor ou pet
+          <span class="search-input">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" />
+            </svg>
+            <input v-model.trim="filtroTexto" class="input input--search" placeholder="Digite um nome..." />
+          </span>
+        </label>
+        <label class="field">
+          Data
+          <input v-model="filtroData" class="input" type="date" />
+        </label>
+        <label class="field">
+          Status
+          <select v-model="filtroStatus" class="input">
+            <option value="">Todos os status</option>
+            <option v-for="status in statusOptions" :key="status">{{ status }}</option>
+          </select>
+        </label>
+        <button v-if="temFiltros" class="btn btn--ghost btn--sm filters__clear" type="button" @click="limparFiltros">
+          Limpar filtros
+        </button>
+      </div>
+
+      <div v-if="carregando" class="skeleton-list" aria-label="Carregando agendamentos">
+        <div v-for="n in 4" :key="n" class="skeleton skeleton-row"></div>
+      </div>
+
+      <div v-else-if="!atendimentosFiltrados.length" class="empty-state">
+        <span class="empty-state__icon" aria-hidden="true">♡</span>
+        <strong>Nenhum atendimento encontrado</strong>
+        <span>{{ temFiltros ? 'Ajuste os filtros para ver mais resultados.' : 'Cadastre o primeiro atendimento da clínica.' }}</span>
+      </div>
+
+      <div v-else class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Data e horário</th>
+              <th>Pet</th>
+              <th>Tutor</th>
+              <th>Veterinário</th>
+              <th>Status</th>
+              <th v-if="canCreateAppointment" class="align-right">Ações</th>
+            </tr>
+          </thead>
+          <TransitionGroup name="list" tag="tbody">
+            <tr v-for="item in atendimentosFiltrados" :key="item.id">
+              <td>
+                <strong class="cell-title">{{ formatarData(item.data_entrada) }}</strong>
+                <small class="cell-sub">{{ formatarHora(item.data_entrada) }}</small>
+              </td>
+              <td>
+                <div class="person">
+                  <span class="avatar" aria-hidden="true">{{ initials(item.paciente?.nome) }}</span>
+                  <span>
+                    <strong class="cell-title">{{ item.paciente?.nome || 'Paciente não encontrado' }}</strong>
+                    <small class="cell-sub">{{ item.paciente?.especie || 'Espécie não informada' }}</small>
+                  </span>
+                </div>
+              </td>
+              <td>{{ item.paciente?.tutor?.nome || 'Tutor não encontrado' }}</td>
+              <td>
+                <span v-if="item.veterinario?.nome" class="person">
+                  <span class="avatar avatar--sm" aria-hidden="true">{{ initials(item.veterinario.nome) }}</span>
+                  {{ item.veterinario.nome }}
+                </span>
+                <span v-else class="cell-sub">A definir</span>
+              </td>
+              <td><span class="badge" :class="statusClass(item.status)">{{ item.status }}</span></td>
+              <td v-if="canCreateAppointment" class="align-right">
+                <div class="row-actions">
+                  <button class="icon-btn" type="button" title="Editar atendimento" aria-label="Editar atendimento" @click="editarAgendamento(item)">✎</button>
+                  <button
+                    v-if="canDeleteAppointment"
+                    class="icon-btn icon-btn--danger"
+                    type="button"
+                    title="Excluir atendimento"
+                    aria-label="Excluir atendimento"
+                    @click="excluirAgendamento(item)"
+                  >⌫</button>
+                </div>
+              </td>
+            </tr>
+          </TransitionGroup>
+        </table>
+      </div>
+    </section>
+  </main>
+</template>
+
 <style scoped>
 .appointments-page {
-  --primary: #2f7d73;
-  --primary-dark: #24665e;
-  --ink: #183b3a;
-  --muted: #728682;
-  --line: #e5ebe8;
-  --surface: #ffffff;
-  width: min(100% - 48px, 1380px);
-  margin: 0 auto;
-  padding: 32px 0 64px;
-  color: var(--ink);
-  background: #f3f5f1;
-  min-height: 100vh;
-  font-family: 'Montserrat Alternates', sans-serif;
-}
-.page-header, .panel-heading {
   display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.appointments-page > * {
+  animation: rise 0.55s var(--ease) backwards;
+}
+
+.appointments-page > :nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.appointments-page > :nth-child(3) {
+  animation-delay: 170ms;
+}
+
+.page-header {
+  margin-bottom: 0;
+}
+
+.card {
+  padding: 26px 28px;
+}
+
+.form-card {
+  transition: box-shadow 0.35s var(--ease), border-color 0.35s;
+}
+
+.form-card.is-editing {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 4px var(--warn-soft), var(--shadow-md);
+}
+
+.form-card__head,
+.list-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+
+.form-card h2,
+.list-card h2 {
+  color: var(--ink);
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.form-card__head p,
+.list-card__head p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.editing-banner {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  color: var(--warn);
+  background: var(--warn-soft);
+  font-size: 0.74rem;
+  font-weight: 600;
 }
-.page-header { margin-bottom: 26px; }
-.eyebrow {
-  margin: 0 0 7px;
-  color: var(--primary);
-  font-size: 11px;
+
+.editing-banner strong {
   font-weight: 800;
-  letter-spacing: .13em;
 }
-h1 { margin: 0; font-size: clamp(26px, 3vw, 34px); letter-spacing: -.04em; }
-.page-subtitle, .panel-heading p, .section-title p {
-  margin: 7px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.5;
+
+.form-body {
+  margin-top: 22px;
 }
-.panel {
-  margin-bottom: 24px;
-  padding: 26px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: 0 5px 20px rgba(32, 63, 52, .035);
+
+.form-section {
+  min-width: 0;
+  margin: 0 0 26px;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 22px;
 }
-.panel-heading { margin-bottom: 25px; }
-.panel-heading h2 { margin: 0; font-size: 19px; letter-spacing: -.02em; }
-.step-tag, .count-pill {
-  padding: 8px 12px;
-  border-radius: 999px;
-  color: var(--primary-dark);
-  background: #e9f5f0;
-  font-size: 12px;
+
+.form-section__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  color: var(--ink);
+  font-size: 0.9rem;
   font-weight: 700;
-  white-space: nowrap;
+  letter-spacing: -0.02em;
 }
-.section-title { display: flex; align-items: center; gap: 12px; margin-bottom: 17px; }
-.section-title h3 { margin: 0; font-size: 15px; }
-.section-title p { margin-top: 4px; font-size: 12px; }
+
+.form-section__hint {
+  margin: 4px 0 18px 38px;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
 .section-icon {
-  display: grid; place-items: center; flex: 0 0 38px; height: 38px;
-  border-radius: 11px; color: var(--primary); background: #eaf5f1; font-size: 20px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  color: var(--accent-soft-ink);
+  background: var(--accent-soft);
+  font-size: 0.8rem;
 }
-.section-spaced { margin-top: 30px; }
+
 .form-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 17px 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px 18px;
 }
-.field { display: flex; min-width: 0; flex-direction: column; gap: 7px; }
-.field > span { color: #44534e; font-size: 12px; font-weight: 700; }
-.field input, .field select, .field textarea {
-  box-sizing: border-box; width: 100%; min-height: 43px; padding: 10px 12px;
-  border: 1px solid #dce5e0; border-radius: 9px; outline: none;
-  color: #263630; background: #fff; font: inherit; font-size: 13px;
-  transition: border-color .15s, box-shadow .15s;
+
+.field--wide {
+  grid-column: span 2;
 }
-.field textarea { resize: vertical; min-height: 70px; }
-.field input:focus, .field select:focus, .field textarea:focus {
-  border-color: var(--primary); box-shadow: 0 0 0 3px rgba(40, 124, 104, .1);
+
+.field--full {
+  grid-column: 1 / -1;
 }
-.field input::placeholder, .field textarea::placeholder { color: #a1ada7; }
-.field-wide, .field-full { grid-column: 1 / -1; }
-.checkbox-field { flex-direction: row; align-items: center; gap: 10px; align-self: end; min-height: 43px; }
-.checkbox-field input { width: 17px; min-height: 17px; accent-color: var(--primary); }
-.form-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
-.btn {
-  display: inline-flex; justify-content: center; align-items: center; gap: 8px;
-  min-height: 41px; padding: 0 16px; border: 1px solid transparent;
-  border-radius: 9px; font: inherit; font-size: 12px; font-weight: 750;
-  cursor: pointer; transition: background .15s, transform .15s;
+
+.input--area {
+  min-height: 84px;
+  padding: 12px 14px;
+  resize: vertical;
+  line-height: 1.5;
 }
-.btn:hover { transform: translateY(-1px); }
-.btn:disabled { opacity: .6; cursor: wait; transform: none; }
-.btn-primary { color: #fff; background: var(--primary); }
-.btn-primary:hover { background: var(--primary-dark); }
-.btn-secondary { color: #465650; background: #fff; border-color: #dce5e0; }
-.btn-secondary:hover, .btn-light:hover { background: #f0f5f2; }
-.btn-light { color: var(--primary-dark); background: #e9f5f0; }
-.list-panel { padding-bottom: 12px; }
-.list-heading { margin-bottom: 20px; }
+
+/* Checkbox customizado */
+
+.check {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  align-self: end;
+  gap: 10px;
+  min-height: 44px;
+  color: var(--ink-2);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.check input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.check__box {
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 6px;
+  transition: background-color 0.2s, border-color 0.2s, transform 0.2s var(--ease);
+}
+
+.check input:checked + .check__box {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.check input:checked + .check__box::after {
+  width: 5px;
+  height: 9px;
+  margin-top: -2px;
+  border: solid var(--accent-ink);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  content: '';
+}
+
+.check:active .check__box {
+  transform: scale(0.9);
+}
+
+.check input:focus-visible + .check__box {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.form-actions .btn--primary {
+  min-width: 200px;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Lista */
+
+.count {
+  flex: 0 0 auto;
+}
+
 .filters {
-  display: grid; grid-template-columns: minmax(180px, 1.5fr) minmax(150px, 1fr) minmax(150px, 1fr) auto;
-  gap: 12px; align-items: end; margin-bottom: 20px; padding: 16px;
-  border-radius: 12px; background: #f3f5f1;
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 14px;
+  margin: 22px 0 6px;
 }
-.filter-clear { min-height: 43px; }
-.table-wrap { width: 100%; overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; text-align: left; white-space: nowrap; }
-th { padding: 13px 14px; color: #7e908c; background: #f7f8f3; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
-td { padding: 15px 14px; border-bottom: 1px solid #edf1ef; font-size: 12px; }
-tbody tr:last-child td { border-bottom: 0; }
-tbody tr:hover { background: #fbfdfc; }
-td strong, td small { display: block; }
-td strong { font-size: 12px; font-weight: 750; }
-td small { margin-top: 5px; color: var(--muted); font-size: 11px; }
-.status { display: inline-flex; padding: 6px 9px; border-radius: 999px; font-size: 10px; font-weight: 750; }
-.status-scheduled { color: #8a6514; background: #fff4d6; }
-.status-progress { color: #245da5; background: #e5f0ff; }
-.status-done { color: #20704d; background: #e0f5e9; }
-.status-cancelled { color: #a33c3c; background: #ffebeb; }
-.actions-column { text-align: center; }
-.row-actions { display: flex; justify-content: center; gap: 6px; }
-.icon-btn {
-  display: grid; place-items: center; width: 31px; height: 31px;
-  border: 1px solid #e0e8e3; border-radius: 8px; color: var(--primary);
-  background: white; cursor: pointer; font-size: 15px;
+
+.filters .field {
+  font-size: 0.64rem;
 }
-.icon-btn:hover { background: #eaf5f1; }
-.icon-btn.danger { color: #b74646; }
-.icon-btn.danger:hover { background: #fff0f0; }
-.empty-state { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; padding: 45px 15px; color: var(--muted); font-size: 12px; text-align: center; }
-.empty-state strong { color: var(--ink); font-size: 14px; }
-.empty-icon { color: #91b8a8; font-size: 30px; }
-.notice { display: flex; justify-content: space-between; gap: 12px; margin: 0 0 18px; padding: 12px 15px; border: 1px solid; border-radius: 10px; font-size: 13px; }
-.notice button { border: 0; background: transparent; font-size: 18px; cursor: pointer; }
-.notice.success { color: #216548; border-color: #c5e8d4; background: #edfaf2; }
-.notice.error { color: #963b3b; border-color: #f0cccc; background: #fff2f2; }
-@media (max-width: 900px) {
-  .appointments-page { width: calc(100% - 32px); padding: 22px 0 48px; }
-  .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .filter-clear { width: 100%; }
+
+.search-input {
+  position: relative;
+  display: block;
 }
-@media (max-width: 600px) {
-  .page-header, .panel-heading { align-items: flex-start; flex-direction: column; }
-  .page-header .btn { width: 100%; }
-  .panel { padding: 19px 15px; }
-  .form-grid, .filters { grid-template-columns: 1fr; }
-  .field-wide, .field-full { grid-column: auto; }
-  .form-actions { flex-direction: column-reverse; }
-  .form-actions .btn { width: 100%; }
-  .step-tag { align-self: flex-start; }
+
+.search-input svg {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.input--search {
+  padding-left: 40px;
+}
+
+.filters__clear {
+  align-self: center;
+  margin-bottom: 4px;
+}
+
+.skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.skeleton-row {
+  height: 52px;
+}
+
+.table {
+  margin-top: 12px;
+}
+
+.table tbody {
+  position: relative;
+}
+
+.cell-title {
+  display: block;
+  color: var(--ink);
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.cell-sub {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 500;
+}
+
+.person {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.avatar {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--accent-soft-ink);
+  background: var(--accent-soft);
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+.avatar--sm {
+  width: 26px;
+  height: 26px;
+  font-size: 0.56rem;
+}
+
+.row-actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.icon-btn--danger:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: transparent;
+}
+
+.list-enter-active,
+.list-leave-active {
+  transition: opacity 0.3s var(--ease), transform 0.3s var(--ease);
+}
+
+.list-leave-active {
+  position: absolute;
+}
+
+.list-move {
+  transition: transform 0.35s var(--ease);
+}
+
+@media (max-width: 1080px) {
+  .form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .field--wide {
+    grid-column: 1 / -1;
+  }
+
+  .filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .card {
+    padding: 20px 18px;
+  }
+
+  .form-grid,
+  .filters {
+    grid-template-columns: 1fr;
+  }
+
+  .form-section__hint {
+    margin-left: 0;
+  }
+
+  .form-actions {
+    flex-direction: column-reverse;
+  }
+
+  .form-actions .btn {
+    width: 100%;
+  }
+
+  .form-actions .btn--primary {
+    min-width: 0;
+  }
+
+  .filters__clear {
+    justify-self: start;
+  }
 }
 </style>

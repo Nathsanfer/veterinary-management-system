@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import { supabase } from '../lib/supabase'
+import { isAdmin } from './auth'
 
 /**
  * Camada de dados ligada ao Supabase.
@@ -71,18 +72,36 @@ function mapAppointment(row) {
     const start = new Date(row.data_entrada)
     const items = row.servicos_realizados ?? []
     const names = [...new Set(items.map((i) => i.servicos?.nome).filter(Boolean))]
+    const patient = row.pacientes
     return {
         id: row.id,
         date: toLocalDate(start),
         time: `${pad(start.getHours())}:${pad(start.getMinutes())}`,
-        pet: row.pacientes?.nome ?? '—',
-        owner: row.pacientes?.tutores?.nome ?? '—',
+        pet: patient?.nome ?? '—',
+        petSpecies: patient?.especie ?? '',
+        petBreed: patient?.raca ?? '',
+        owner: patient?.tutores?.nome ?? '—',
+        ownerPhone: patient?.tutores?.telefone ?? '',
         service: names.join(', ') || 'Sem serviço',
         serviceId: items[0]?.servico_id ?? null,
+        reason: row.motivo_visita ?? '',
+        vetId: row.veterinario_id ?? null,
+        vetName: row.veterinario?.nome ?? '',
+        vetCrmv: row.veterinario?.crmv ?? '',
         price: items.reduce((sum, i) => sum + Number(i.valor_total ?? 0), 0),
         status: statusMap[row.status] ?? 'scheduled',
         tone: calendarToneByColor[items[0]?.servicos?.cor] ?? 'green'
     }
+}
+
+/* ------------------------- Veterinários ------------------------- */
+
+export const veterinarians = ref([])
+
+async function fetchVeterinarians() {
+    // Não lança erro: se o perfil não puder listar veterinários, a agenda continua funcionando
+    const { data } = await supabase.from('veterinarios').select('id, nome, crmv').order('nome')
+    veterinarians.value = data ?? []
 }
 
 /** Agendamentos no formato que a Agenda desenha (cancelados ficam de fora). */
@@ -132,8 +151,9 @@ async function fetchAppointments() {
     const { data, error } = await supabase
         .from('atendimentos')
         .select(`
-            id, data_entrada, status,
-            pacientes ( nome, tutores ( nome ) ),
+            id, data_entrada, status, motivo_visita, veterinario_id,
+            veterinario:veterinarios!atendimentos_veterinario_id_fkey ( nome, crmv ),
+            pacientes ( nome, especie, raca, tutores ( nome, telefone ) ),
             servicos_realizados ( servico_id, valor_total, servicos ( nome, cor ) )
         `)
         .order('data_entrada')
@@ -142,6 +162,11 @@ async function fetchAppointments() {
 }
 
 async function fetchTransactions() {
+    // Financeiro é exclusivo do administrador: outros cargos nem consultam
+    if (!isAdmin.value) {
+        transactions.value = []
+        return
+    }
     const { data, error } = await supabase
         .from('vw_lancamentos')
         .select('*')
@@ -155,7 +180,7 @@ export async function loadAll() {
     loading.value = true
     loadError.value = ''
     try {
-        await Promise.all([fetchServices(), fetchAppointments(), fetchTransactions()])
+        await Promise.all([fetchServices(), fetchAppointments(), fetchTransactions(), fetchVeterinarians()])
     } catch (error) {
         loadError.value = error.message ?? 'Não foi possível carregar os dados.'
         console.error(error)
@@ -168,6 +193,7 @@ export function clearData() {
     services.value = []
     appointments.value = []
     transactions.value = []
+    veterinarians.value = []
 }
 
 /* ------------------------------ Escritas ------------------------------ */
@@ -209,7 +235,7 @@ async function findOrCreatePatient(nome, tutorId) {
  * Cria o atendimento (status "Agendado") e o serviço previsto.
  * O preço é copiado do serviço para valor_unitario, preservando o histórico.
  */
-export async function addAppointment({ date, time, pet, owner, serviceId }) {
+export async function addAppointment({ date, time, pet, owner, serviceId, veterinarioId }) {
     const service = getService(serviceId)
     if (!service) throw new Error('Serviço não encontrado.')
 
@@ -220,6 +246,7 @@ export async function addAppointment({ date, time, pet, owner, serviceId }) {
         .from('atendimentos')
         .insert({
             paciente_id: patientId,
+            veterinario_id: veterinarioId || null,
             data_entrada: new Date(`${date}T${time}:00`).toISOString(),
             status: 'Agendado',
             motivo_visita: service.name

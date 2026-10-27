@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import TopBar from '../components/TopBar.vue'
+import { addDays } from '../components/dashboard/dashboardUtils'
 import {
     TODAY,
     addManualTransaction,
@@ -9,6 +10,7 @@ import {
     markAsPaid,
     transactions
 } from '../stores/clinic'
+import { notify } from '../stores/toast'
 
 const brl = (value) =>
     value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -16,12 +18,6 @@ const brl = (value) =>
 /* ---------- Período ---------- */
 const periods = ['Semana', 'Mês', 'Ano']
 const activePeriod = ref('Mês')
-
-const addDays = (iso, days) => {
-    const d = new Date(`${iso}T12:00:00`)
-    d.setDate(d.getDate() + days)
-    return d.toISOString().slice(0, 10)
-}
 
 // Intervalo [start, end] do período ativo, tomando TODAY como referência
 const range = computed(() => {
@@ -72,11 +68,11 @@ const pendingItems = computed(() => periodTransactions.value.filter((t) => t.sta
 const pendingTotal = computed(() => pendingItems.value.reduce((sum, t) => sum + t.amount, 0))
 
 const summaryCards = computed(() => [
-    { label: 'Receitas', value: brl(totalIncome.value), hint: 'Atendimentos concluídos e avulsos', tone: 'mint', trend: 'up' },
-    { label: 'Despesas', value: brl(totalExpense.value), hint: 'Lançamentos avulsos', tone: 'peach', trend: 'down' },
-    { label: 'Saldo', value: brl(totalIncome.value - totalExpense.value), hint: 'Receitas − despesas', tone: 'blue', trend: 'up' },
-    { label: 'Pendente', value: brl(pendingTotal.value), hint: `${pendingItems.value.length} lançamento(s) em aberto`, tone: 'lemon', trend: 'flat' },
-    { label: 'Previsto na agenda', value: brl(forecastRevenue.value), hint: 'Atendimentos ainda agendados', tone: 'aqua', trend: 'flat' }
+    { label: 'Receitas', value: brl(totalIncome.value), hint: 'Atendimentos concluídos e avulsos', tone: 'green', icon: '↗' },
+    { label: 'Despesas', value: brl(totalExpense.value), hint: 'Lançamentos avulsos', tone: 'peach', icon: '↘' },
+    { label: 'Saldo', value: brl(totalIncome.value - totalExpense.value), hint: 'Receitas − despesas', tone: 'blue', icon: '＝' },
+    { label: 'Pendente', value: brl(pendingTotal.value), hint: `${pendingItems.value.length} lançamento(s) em aberto`, tone: 'yellow', icon: '!' },
+    { label: 'Previsto na agenda', value: brl(forecastRevenue.value), hint: 'Atendimentos ainda agendados', tone: 'aqua', icon: '◷' }
 ])
 
 const categories = computed(() => {
@@ -133,6 +129,11 @@ function onAmountKeydown(event) {
     if (!/^\d$/.test(event.key)) event.preventDefault()
 }
 
+function openModal() {
+    saveError.value = ''
+    isModalOpen.value = true
+}
+
 async function saveTransaction() {
     saveError.value = ''
     if (amountCents.value <= 0) {
@@ -151,6 +152,7 @@ async function saveTransaction() {
         })
         isModalOpen.value = false
         form.value = blankForm()
+        notify('Lançamento registrado.')
     } catch (error) {
         saveError.value = error.message ?? 'Não foi possível salvar o lançamento.'
     } finally {
@@ -163,454 +165,413 @@ const statusLabels = { paid: 'Pago', pending: 'Pendente', overdue: 'Atrasado' }
 async function payTransaction(item) {
     try {
         await markAsPaid(item.id, item.method !== '—' ? item.method : 'Pix')
+        notify('Lançamento marcado como pago.')
     } catch (error) {
-        window.alert(error.message ?? 'Não foi possível atualizar o lançamento.')
+        notify(error.message ?? 'Não foi possível atualizar o lançamento.', 'error')
     }
 }
 </script>
 
 <template>
-    <div class="finances-page">
-        <TopBar />
+    <TopBar />
 
-        <main class="finances-content">
-            <p v-if="loadError" class="load-error" role="alert">{{ loadError }}</p>
-            <header class="finances-heading">
-                <div>
-                    <p class="eyebrow">CONTROLE FINANCEIRO</p>
-                    <h1>Finanças</h1>
-                    <p class="heading-description">Acompanhe receitas, despesas e o desempenho financeiro da clínica.</p>
-                </div>
-                <div class="heading-actions">
-                    <div class="period-switcher" role="group" aria-label="Período">
-                        <button
-                            v-for="period in periods"
-                            :key="period"
-                            type="button"
-                            :class="{ active: activePeriod === period }"
-                            @click="activePeriod = period"
-                        >
-                            {{ period }}
-                        </button>
-                    </div>
-                    <button class="primary-button" type="button" @click="isModalOpen = true">
-                        <span class="plus">+</span>Novo lançamento
+    <main class="page finances-page">
+        <header class="page-header">
+            <div>
+                <p class="eyebrow">Controle financeiro</p>
+                <h1 class="page-title">Finanças</h1>
+                <p class="page-subtitle">Acompanhe receitas, despesas e o desempenho financeiro da clínica.</p>
+            </div>
+            <div class="header-actions">
+                <div class="segmented" role="group" aria-label="Período">
+                    <button
+                        v-for="period in periods"
+                        :key="period"
+                        type="button"
+                        :class="{ 'is-active': activePeriod === period }"
+                        :aria-pressed="activePeriod === period"
+                        @click="activePeriod = period"
+                    >
+                        {{ period }}
                     </button>
                 </div>
-            </header>
+                <button class="btn btn--primary" type="button" @click="openModal">
+                    <span aria-hidden="true">+</span> Novo lançamento
+                </button>
+            </div>
+        </header>
 
-            <section class="summary-grid" aria-label="Resumo financeiro">
-                <article v-for="card in summaryCards" :key="card.label" class="summary-card">
-                    <span class="summary-card__dot" :class="`tone--${card.tone}`" aria-hidden="true"></span>
-                    <span class="footer-label">{{ card.label }}</span>
-                    <strong class="summary-card__value">{{ card.value }}</strong>
-                    <small class="summary-card__hint" :class="`trend--${card.trend}`">{{ card.hint }}</small>
-                </article>
-            </section>
+        <p v-if="loadError" class="text-error" role="alert">{{ loadError }}</p>
 
-            <section class="panels">
-                <article class="panel chart-panel">
-                    <div class="panel__header">
-                        <div>
-                            <h2>Fluxo de caixa</h2>
-                            <p>Últimos 6 meses</p>
-                        </div>
-                        <div class="legend">
-                            <span><i class="legend__dot legend__dot--income"></i>Receitas</span>
-                            <span><i class="legend__dot legend__dot--expense"></i>Despesas</span>
-                        </div>
-                    </div>
-                    <div class="chart" role="img" aria-label="Gráfico de receitas e despesas por mês">
-                        <div v-for="month in monthly" :key="month.label" class="chart__group">
-                            <div class="chart__bars">
-                                <span class="bar bar--income" :style="{ height: barHeight(month.income) }" :title="brl(month.income)"></span>
-                                <span class="bar bar--expense" :style="{ height: barHeight(month.expense) }" :title="brl(month.expense)"></span>
-                            </div>
-                            <span class="chart__label">{{ month.label }}</span>
-                        </div>
-                    </div>
-                </article>
+        <section class="summary-grid stagger" aria-label="Resumo financeiro">
+            <article
+                v-for="(card, index) in summaryCards"
+                :key="card.label"
+                class="card summary-card"
+                :class="`summary-card--${card.tone}`"
+                :style="{ '--i': index }"
+            >
+                <div class="summary-card__top">
+                    <span class="summary-card__icon" aria-hidden="true">{{ card.icon }}</span>
+                    <span class="summary-card__label">{{ card.label }}</span>
+                </div>
+                <strong class="summary-card__value">{{ card.value }}</strong>
+                <small class="summary-card__hint">{{ card.hint }}</small>
+            </article>
+        </section>
 
-                <article class="panel">
-                    <div class="panel__header">
-                        <div>
-                            <h2>Receitas por categoria</h2>
-                            <p>Distribuição do período</p>
-                        </div>
-                    </div>
-                    <ul class="category-list">
-                        <li v-for="category in categories" :key="category.name">
-                            <div class="category-list__row">
-                                <span>{{ category.name }}</span>
-                                <strong>{{ brl(category.value) }}</strong>
-                            </div>
-                            <div class="progress"><span :style="{ width: `${category.percent}%` }"></span></div>
-                        </li>
-                    </ul>
-                </article>
-            </section>
-
-            <section class="panel transactions-panel">
+        <section class="panels">
+            <article class="card panel chart-panel">
                 <div class="panel__header">
                     <div>
-                        <h2>Lançamentos recentes</h2>
-                        <p>{{ filteredTransactions.length }} registros</p>
+                        <h2>Fluxo de caixa</h2>
+                        <p>Últimos 6 meses</p>
                     </div>
-                    <div class="period-switcher" role="group" aria-label="Filtrar lançamentos">
-                        <button
-                            v-for="item in filters"
-                            :key="item.key"
-                            type="button"
-                            :class="{ active: filter === item.key }"
-                            @click="filter = item.key"
-                        >
-                            {{ item.label }}
-                        </button>
+                    <div class="legend">
+                        <span><i class="legend__dot legend__dot--income"></i>Receitas</span>
+                        <span><i class="legend__dot legend__dot--expense"></i>Despesas</span>
                     </div>
                 </div>
-
-                <div class="table-scroll">
-                    <table class="transactions-table">
-                        <thead>
-                            <tr>
-                                <th>Data</th>
-                                <th>Descrição</th>
-                                <th>Categoria</th>
-                                <th>Pagamento</th>
-                                <th>Status</th>
-                                <th class="align-right">Valor</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr v-for="item in filteredTransactions" :key="item.id">
-                                <td>{{ formatDate(item.date) }}</td>
-                                <td class="description-cell">{{ item.description }}<span v-if="item.source === 'agenda'" class="origin">Agenda</span></td>
-                                <td><span class="tag">{{ item.category }}</span></td>
-                                <td>{{ item.method }}</td>
-                                <td>
-                                    <span class="status" :class="`status--${item.status}`">
-                                        {{ statusLabels[item.status] }}
-                                    </span>
-                                    <button
-                                        v-if="item.status !== 'paid'"
-                                        class="pay-button"
-                                        type="button"
-                                        @click="payTransaction(item)"
-                                    >
-                                        Marcar pago
-                                    </button>
-                                </td>
-                                <td class="align-right amount" :class="`amount--${item.type}`">
-                                    {{ item.type === 'income' ? '+' : '−' }} {{ brl(item.amount) }}
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div class="chart" role="img" aria-label="Gráfico de receitas e despesas por mês">
+                    <div v-for="month in monthly" :key="month.label" class="chart__group">
+                        <div class="chart__bars">
+                            <span class="bar bar--income" :style="{ height: barHeight(month.income) }" :title="brl(month.income)"></span>
+                            <span class="bar bar--expense" :style="{ height: barHeight(month.expense) }" :title="brl(month.expense)"></span>
+                        </div>
+                        <span class="chart__label">{{ month.label }}</span>
+                    </div>
                 </div>
-            </section>
-        </main>
+            </article>
 
-        <div v-if="isModalOpen" class="modal-backdrop" @click.self="isModalOpen = false">
-            <form class="modal" @submit.prevent="saveTransaction">
+            <article class="card panel">
+                <div class="panel__header">
+                    <div>
+                        <h2>Receitas por categoria</h2>
+                        <p>Distribuição do período</p>
+                    </div>
+                </div>
+                <div v-if="!categories.length" class="empty-state empty-state--compact">
+                    <span class="empty-state__icon" aria-hidden="true">◌</span>
+                    <strong>Sem receitas no período</strong>
+                </div>
+                <ul v-else class="category-list">
+                    <li v-for="(category, index) in categories" :key="category.name" :style="{ '--i': index }">
+                        <div class="category-list__row">
+                            <span>{{ category.name }}</span>
+                            <strong>{{ brl(category.value) }}</strong>
+                        </div>
+                        <div class="progress"><span :style="{ width: `${category.percent}%` }"></span></div>
+                    </li>
+                </ul>
+            </article>
+        </section>
+
+        <section class="card panel">
+            <div class="panel__header">
+                <div>
+                    <h2>Lançamentos recentes</h2>
+                    <p>{{ filteredTransactions.length }} {{ filteredTransactions.length === 1 ? 'registro' : 'registros' }}</p>
+                </div>
+                <div class="segmented" role="group" aria-label="Filtrar lançamentos">
+                    <button
+                        v-for="item in filters"
+                        :key="item.key"
+                        type="button"
+                        :class="{ 'is-active': filter === item.key }"
+                        :aria-pressed="filter === item.key"
+                        @click="filter = item.key"
+                    >
+                        {{ item.label }}
+                    </button>
+                </div>
+            </div>
+
+            <div v-if="!filteredTransactions.length" class="empty-state">
+                <span class="empty-state__icon" aria-hidden="true">✳</span>
+                <strong>Nenhum lançamento neste período</strong>
+                <span>Registre uma receita ou despesa avulsa para vê-la aqui.</span>
+            </div>
+
+            <div v-else class="table-wrap">
+                <table class="table transactions-table">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Descrição</th>
+                            <th>Categoria</th>
+                            <th>Pagamento</th>
+                            <th>Status</th>
+                            <th class="align-right">Valor</th>
+                        </tr>
+                    </thead>
+                    <TransitionGroup name="list" tag="tbody">
+                        <tr v-for="item in filteredTransactions" :key="item.id">
+                            <td class="muted-cell">{{ formatDate(item.date) }}</td>
+                            <td>
+                                <span class="description">{{ item.description }}</span>
+                                <span v-if="item.source === 'agenda'" class="origin">Agenda</span>
+                            </td>
+                            <td><span class="badge badge--neutral">{{ item.category }}</span></td>
+                            <td class="muted-cell">{{ item.method }}</td>
+                            <td>
+                                <span class="badge" :class="`badge--${item.status === 'paid' ? 'success' : item.status === 'overdue' ? 'danger' : 'warn'}`">
+                                    {{ statusLabels[item.status] }}
+                                </span>
+                                <button
+                                    v-if="item.status !== 'paid'"
+                                    class="btn btn--ghost btn--sm pay-button"
+                                    type="button"
+                                    @click="payTransaction(item)"
+                                >
+                                    Marcar pago
+                                </button>
+                            </td>
+                            <td class="align-right amount" :class="`amount--${item.type}`">
+                                {{ item.type === 'income' ? '+' : '−' }} {{ brl(item.amount) }}
+                            </td>
+                        </tr>
+                    </TransitionGroup>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <Transition name="overlay">
+        <div v-if="isModalOpen" class="overlay" @click.self="isModalOpen = false">
+            <form class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="entry-title" @submit.prevent="saveTransaction">
                 <button class="modal-close" type="button" aria-label="Fechar" @click="isModalOpen = false">×</button>
                 <p class="eyebrow">Novo registro</p>
-                <h2>Adicionar lançamento</h2>
+                <h2 id="entry-title" class="modal-title">Adicionar lançamento</h2>
 
                 <div class="type-toggle" role="group" aria-label="Tipo de lançamento">
-                    <button type="button" :class="{ active: form.type === 'income' }" @click="form.type = 'income'">Receita</button>
-                    <button type="button" :class="{ active: form.type === 'expense' }" @click="form.type = 'expense'">Despesa</button>
+                    <button type="button" :class="{ 'is-income': form.type === 'income', 'is-expense': form.type === 'expense' }" :aria-pressed="form.type === 'income'" @click="form.type = 'income'">
+                        <span class="type-toggle__dot type-toggle__dot--income"></span>Receita
+                    </button>
+                    <button type="button" :class="{ 'is-income': form.type === 'income', 'is-expense': form.type === 'expense' }" :aria-pressed="form.type === 'expense'" @click="form.type = 'expense'">
+                        <span class="type-toggle__dot type-toggle__dot--expense"></span>Despesa
+                    </button>
                 </div>
 
-                <label>
-                    Descrição
-                    <input v-model="form.description" required placeholder="Ex.: Consulta clínica — Thor" />
-                </label>
-                <div class="form-row">
-                    <label>
-                        Valor (R$)
-                        <input
-                            :value="form.amount"
-                            type="text"
-                            inputmode="numeric"
-                            maxlength="10"
-                            autocomplete="off"
-                            required
-                            placeholder="0,00"
-                            @keydown="onAmountKeydown"
-                            @input="onAmountInput"
-                        />
+                <div class="form-stack">
+                    <label class="field">
+                        Descrição
+                        <input v-model="form.description" class="input" required placeholder="Ex.: Consulta clínica — Thor" />
                     </label>
-                    <label>
-                        Data
-                        <input v-model="form.date" type="date" required />
-                    </label>
+
+                    <div class="form-row">
+                        <label class="field">
+                            Valor (R$)
+                            <input
+                                :value="form.amount"
+                                class="input amount-input"
+                                type="text"
+                                inputmode="numeric"
+                                maxlength="10"
+                                autocomplete="off"
+                                required
+                                placeholder="0,00"
+                                @keydown="onAmountKeydown"
+                                @input="onAmountInput"
+                            />
+                        </label>
+                        <label class="field">
+                            Data
+                            <input v-model="form.date" class="input" type="date" required />
+                        </label>
+                    </div>
+
+                    <div class="form-row">
+                        <label class="field">
+                            Categoria
+                            <select v-model="form.category" class="input">
+                                <option>Consultas</option>
+                                <option>Vacinação</option>
+                                <option>Banho e tosa</option>
+                                <option>Cirurgias</option>
+                                <option>Exames</option>
+                                <option>Hospedagem</option>
+                                <option>Insumos</option>
+                                <option>Despesas fixas</option>
+                            </select>
+                        </label>
+                        <label class="field">
+                            Pagamento
+                            <select v-model="form.method" class="input">
+                                <option>Pix</option>
+                                <option>Cartão</option>
+                                <option>Dinheiro</option>
+                                <option>Boleto</option>
+                                <option>Transferência</option>
+                            </select>
+                        </label>
+                    </div>
                 </div>
-                <div class="form-row">
-                    <label>
-                        Categoria
-                        <select v-model="form.category">
-                            <option>Consultas</option>
-                            <option>Vacinação</option>
-                            <option>Banho e tosa</option>
-                            <option>Cirurgias</option>
-                            <option>Exames</option>
-                            <option>Hospedagem</option>
-                            <option>Insumos</option>
-                            <option>Despesas fixas</option>
-                        </select>
-                    </label>
-                    <label>
-                        Pagamento
-                        <select v-model="form.method">
-                            <option>Pix</option>
-                            <option>Cartão</option>
-                            <option>Dinheiro</option>
-                            <option>Boleto</option>
-                            <option>Transferência</option>
-                        </select>
-                    </label>
-                </div>
-                <p v-if="saveError" class="modal-error" role="alert">{{ saveError }}</p>
-                <button class="primary-button modal-submit" type="submit" :disabled="saving">
+
+                <p v-if="saveError" class="text-error save-error" role="alert">{{ saveError }}</p>
+
+                <button class="btn btn--primary btn--block submit" type="submit" :disabled="saving">
+                    <span v-if="saving" class="spinner" aria-hidden="true"></span>
                     {{ saving ? 'Salvando...' : 'Salvar lançamento' }}
                 </button>
             </form>
         </div>
-    </div>
+    </Transition>
 </template>
 
 <style scoped>
 .finances-page {
-    --ink: #183b3a;
-    --muted: #728682;
-    --line: #e0e9e1;
-    --cream: #fffefa;
-    min-height: 100vh;
-    color: var(--ink);
-    background: #f3f5f1;
-}
-
-.finances-content {
-    width: min(100% - 48px, 1380px);
-    margin: 0 auto;
-    padding: 32px 0 64px;
-}
-
-.finances-heading {
     display: flex;
-    align-items: end;
-    justify-content: space-between;
-    gap: 32px;
-    margin-bottom: 34px;
+    flex-direction: column;
+    gap: 22px;
 }
 
-.eyebrow {
-    margin: 0 0 10px;
-    color: #789575;
-    font-size: 0.55rem;
-    font-weight: 800;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
+.finances-page > * {
+    animation: rise 0.55s var(--ease) backwards;
 }
 
-.finances-heading h1 {
-    margin: 0;
-    color: #1d1f1fd0;
-    font-size: clamp(1.9rem, 3vw, 2rem);
-    font-weight: 800;
-    line-height: 1;
+.finances-page > :nth-child(2) { animation-delay: 60ms; }
+.finances-page > :nth-child(3) { animation-delay: 120ms; }
+.finances-page > :nth-child(4) { animation-delay: 180ms; }
+
+.page-header {
+    margin-bottom: 0;
 }
 
-.heading-description {
-    max-width: 550px;
-    margin: 10px 0 0;
-    color: var(--muted);
-    font-size: 0.82rem;
-    line-height: 1.6;
-}
-
-.heading-actions {
+.header-actions {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 12px;
 }
 
-.primary-button {
-    border: 0;
-    border-radius: 10px;
-    padding: 10px 20px;
-    color: #fff;
-    background: #31572c;
-    box-shadow: 0 9px 20px #31572c24;
-    cursor: pointer;
-    font: inherit;
-    font-size: 0.74rem;
-    font-weight: 800;
-    white-space: nowrap;
-    transition: transform 0.2s, background 0.2s;
+.card {
+    transition: transform 0.3s var(--ease), box-shadow 0.3s var(--ease), background-color 0.35s, border-color 0.35s;
 }
 
-.primary-button:hover {
-    background: #264a24;
-    transform: translateY(-2px);
-}
+/* Resumo */
 
-.plus {
-    margin-right: 8px;
-    font-size: 1.2rem;
-    vertical-align: -1px;
-}
-
-.period-switcher,
-.type-toggle {
-    display: flex;
-    padding: 3px;
-    border-radius: 9px;
-    background: #eef3ed;
-}
-
-.period-switcher button,
-.type-toggle button {
-    border: 0;
-    border-radius: 7px;
-    padding: 9px 18px;
-    color: var(--muted);
-    background: transparent;
-    cursor: pointer;
-    font: inherit;
-    font-size: 0.68rem;
-    font-weight: 800;
-    transition: background 0.2s, color 0.2s;
-}
-
-.period-switcher button.active,
-.type-toggle button.active {
-    color: var(--ink);
-    background: #fff;
-    box-shadow: 0 2px 6px rgba(24, 59, 58, 0.1);
-}
-
-/* Summary cards */
 .summary-grid {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 20px;
-    margin-bottom: 28px;
+    gap: 14px;
 }
 
 .summary-card {
     position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 22px 24px;
-    border: 1px solid rgba(24, 59, 58, 0.07);
-    border-radius: 8px;
-    background: #fff;
-    box-shadow: 0 14px 30px rgba(24, 59, 58, 0.07);
-    transition: transform 180ms ease, box-shadow 180ms ease;
+    overflow: hidden;
+    padding: 18px 18px 16px;
+}
+
+.summary-card::before {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: 3px;
+    background: var(--tone-bar);
+    content: '';
 }
 
 .summary-card:hover {
     transform: translateY(-3px);
-    box-shadow: 0 18px 34px rgba(24, 59, 58, 0.11);
+    box-shadow: var(--shadow-md);
 }
 
-.summary-card__dot {
-    position: absolute;
-    top: 22px;
-    right: 22px;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
+.summary-card--green { --tone-bar: var(--tone-green-bar); --tone-bg: var(--tone-green-bg); --tone-ink: var(--tone-green-ink); }
+.summary-card--peach { --tone-bar: #d5a078; --tone-bg: rgba(213, 160, 120, 0.18); --tone-ink: #9a6a44; }
+.summary-card--blue { --tone-bar: var(--tone-blue-bar); --tone-bg: var(--tone-blue-bg); --tone-ink: var(--tone-blue-ink); }
+.summary-card--yellow { --tone-bar: var(--tone-yellow-bar); --tone-bg: var(--tone-yellow-bg); --tone-ink: var(--tone-yellow-ink); }
+.summary-card--aqua { --tone-bar: #6ab3a3; --tone-bg: rgba(106, 179, 163, 0.16); --tone-ink: #2f7a66; }
+
+.summary-card__top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
-.tone--mint { background: #2f7d73; }
-.tone--peach { background: #b9785d; }
-.tone--blue { background: #5c8193; }
-.tone--lemon { background: #789b5a; }
-.tone--aqua { background: #3f8f8a; }
-.origin {
-    margin-left: 8px;
-    padding: 2px 7px;
-    border-radius: 20px;
-    color: #3f8f8a;
-    background: #e3f1ef;
-    font-size: 0.58rem;
-    font-weight: 800;
+.summary-card__icon {
+    display: grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+    color: var(--tone-ink);
+    background: var(--tone-bg);
+    font-size: 0.9rem;
+    font-weight: 700;
 }
 
-.footer-label {
-    color: #7e908c;
-    font-size: 0.62rem;
-    font-weight: 600;
+.summary-card__label {
+    color: var(--muted);
+    font-size: 0.66rem;
+    font-weight: 700;
 }
 
 .summary-card__value {
-    color: #252929d0;
-    font-size: 1.2rem;
-    font-weight: 800;
-    letter-spacing: -0.03em;
+    display: block;
+    margin-top: 16px;
+    color: var(--ink);
+    font-size: clamp(1.05rem, 1.6vw, 1.35rem);
+    font-weight: 700;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
 }
 
 .summary-card__hint {
-    font-size: 0.62rem;
-    font-weight: 700;
+    display: block;
+    margin-top: 6px;
     color: var(--muted);
+    font-size: 0.6rem;
+    font-weight: 500;
 }
 
-.trend--up { color: #2f7d73; }
-.trend--down { color: #b9785d; }
+/* Painéis */
 
-/* Panels */
 .panels {
     display: grid;
-    grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
-    gap: 28px;
-    margin-bottom: 28px;
+    grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
+    gap: 18px;
 }
 
 .panel {
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: var(--cream);
-    box-shadow: 0 12px 35px #1a554a09;
     padding: 24px 26px;
 }
 
 .panel__header {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 22px;
+    gap: 14px 16px;
+    margin-bottom: 20px;
 }
 
-.panel__header h2 {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 800;
-    color: #252929d0;
+.panel h2 {
+    color: var(--ink);
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
 }
 
 .panel__header p {
-    margin: 4px 0 0;
+    margin: 5px 0 0;
     color: var(--muted);
-    font-size: 0.7rem;
+    font-size: 0.68rem;
 }
 
 .legend {
     display: flex;
     gap: 16px;
     color: var(--muted);
-    font-size: 0.65rem;
-    font-weight: 700;
+    font-size: 0.66rem;
+    font-weight: 600;
 }
 
 .legend span {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 7px;
 }
 
 .legend__dot {
@@ -619,281 +580,298 @@ async function payTransaction(item) {
     border-radius: 3px;
 }
 
-.legend__dot--income, .bar--income { background: #2f7d73; }
-.legend__dot--expense, .bar--expense { background: #b9785d; }
+.legend__dot--income { background: var(--tone-green-bar); }
+.legend__dot--expense { background: #d5a078; }
 
-/* Chart */
+/* Gráfico */
+
 .chart {
-    height: 220px;
-    display: flex;
-    align-items: stretch;
-    justify-content: space-between;
-    gap: 14px;
-    padding-bottom: 4px;
-    border-bottom: 1px solid var(--line);
-    background-image: linear-gradient(to bottom, var(--line) 1px, transparent 1px);
-    background-size: 100% 25%;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 12px;
+    height: 240px;
+    padding: 0 6px;
+    border-bottom: 1px dashed var(--line);
 }
 
 .chart__group {
-    flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    justify-content: flex-end;
+    min-width: 0;
 }
 
 .chart__bars {
-    width: 100%;
-    flex: 1;
     display: flex;
-    align-items: end;
+    align-items: flex-end;
     justify-content: center;
-    gap: 6px;
+    gap: clamp(4px, 1vw, 9px);
+    width: 100%;
+    height: 200px;
 }
 
 .bar {
-    width: 22px;
-    max-width: 38%;
-    border-radius: 5px 5px 0 0;
-    transition: opacity 0.2s;
+    width: min(26px, 36%);
+    min-height: 4px;
+    border-radius: 7px 7px 3px 3px;
+    transition: height 0.9s var(--ease), filter 0.2s;
 }
 
-.bar:hover { opacity: 0.75; }
+.bar:hover {
+    filter: brightness(1.12);
+}
+
+.bar--income { background: linear-gradient(180deg, var(--tone-green-bar), var(--accent)); }
+.bar--expense { background: linear-gradient(180deg, #e5b58d, #c98d66); }
 
 .chart__label {
-    margin-bottom: -26px;
+    margin-top: 10px;
     color: var(--muted);
-    font-size: 0.65rem;
-    font-weight: 700;
+    font-size: 0.64rem;
+    font-weight: 600;
 }
 
-.chart-panel .chart { margin-bottom: 30px; }
+/* Categorias */
 
-/* Category list */
 .category-list {
-    margin: 0;
-    padding: 0;
-    list-style: none;
     display: flex;
     flex-direction: column;
     gap: 18px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.category-list li {
+    animation: rise 0.5s var(--ease) both;
+    animation-delay: calc(var(--i, 0) * 80ms);
 }
 
 .category-list__row {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 8px;
-    font-size: 0.74rem;
-    color: #6c7d7a;
-    font-weight: 600;
+    gap: 12px;
+    margin-bottom: 9px;
+    color: var(--ink-2);
+    font-size: 0.72rem;
 }
 
 .category-list__row strong {
-    color: #31572cbc;
-    font-weight: 800;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
 }
 
 .progress {
-    height: 7px;
-    border-radius: 7px;
-    background: #edf1ec;
+    height: 8px;
     overflow: hidden;
+    border-radius: 999px;
+    background: var(--surface-3);
 }
 
 .progress span {
     display: block;
     height: 100%;
-    border-radius: 7px;
-    background: linear-gradient(90deg, #3f8f8a, #99b55f);
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--tone-green-bar), var(--accent));
+    transition: width 1s var(--ease);
 }
 
-/* Table */
-.table-scroll { overflow-x: auto; }
-
-.transactions-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.74rem;
+.empty-state--compact {
+    min-height: 140px;
 }
 
-.transactions-table th {
-    padding: 0 12px 12px;
-    border-bottom: 1px solid var(--line);
-    color: #7e908c;
-    font-size: 0.62rem;
-    font-weight: 700;
-    text-align: left;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-}
+/* Tabela */
 
 .transactions-table td {
-    padding: 15px 12px;
-    border-bottom: 1px solid #edf1ec;
-    color: #6c7d7a;
+    font-size: 0.72rem;
+}
+
+.muted-cell {
+    color: var(--muted);
     white-space: nowrap;
 }
 
-.transactions-table tbody tr { transition: background 0.2s; }
-.transactions-table tbody tr:hover { background: #f7f9f5; }
-.transactions-table tbody tr:last-child td { border-bottom: 0; }
+.description {
+    display: inline-block;
+    margin-right: 8px;
+    color: var(--ink);
+    font-weight: 600;
+}
 
-.description-cell { color: #252929d0 !important; font-weight: 700; }
-.align-right { text-align: right !important; }
-
-.tag {
-    padding: 4px 10px;
-    border-radius: 20px;
-    background: #eef3ed;
-    color: #31572c;
-    font-size: 0.64rem;
+.origin {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 6px;
+    color: var(--accent-soft-ink);
+    background: var(--accent-soft);
+    font-size: 0.56rem;
     font-weight: 700;
 }
 
-.status {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.66rem;
+.amount {
     font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
-.status::before {
-    width: 7px;
-    height: 7px;
-    content: '';
-    border-radius: 50%;
-    background: currentColor;
+.amount--income {
+    color: var(--success);
 }
 
-.status--paid { color: #2f7d73; }
-.status--pending { color: #b9785d; }
-.status--overdue { color: #b9533d; }
+.amount--expense {
+    color: var(--danger);
+}
 
 .pay-button {
-    margin-left: 10px;
-    border: 1px solid var(--line);
-    border-radius: 7px;
-    padding: 4px 9px;
-    color: #31572c;
-    background: #fff;
-    cursor: pointer;
-    font: inherit;
-    font-size: 0.6rem;
-    font-weight: 800;
+    margin-left: 8px;
+    color: var(--accent-soft-ink);
 }
-
-.pay-button:hover { background: #eef3ed; }
-
-.load-error,
-.modal-error {
-    color: #b9533d;
-    font-size: 0.74rem;
-    font-weight: 700;
-}
-
-.primary-button:disabled { opacity: 0.6; cursor: not-allowed; }
-
-.amount { font-weight: 800; }
-.amount--income { color: #2f7d73 !important; }
-.amount--expense { color: #b9785d !important; }
 
 /* Modal */
-.modal-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 50;
-    display: grid;
-    place-items: center;
-    padding: 20px;
-    background: rgba(24, 59, 58, 0.35);
-    backdrop-filter: blur(3px);
-}
 
-.modal {
-    position: relative;
-    width: min(100%, 440px);
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    padding: 30px;
-    border-radius: 16px;
-    background: var(--cream);
-    box-shadow: 0 24px 60px rgba(24, 59, 58, 0.25);
-}
-
-.modal h2 { margin: 0 0 4px; font-size: 1.3rem; }
-
-.modal-close {
-    position: absolute;
-    top: 14px;
-    right: 16px;
-    border: 0;
-    background: none;
-    color: var(--muted);
-    cursor: pointer;
-    font-size: 1.6rem;
-}
-
-.modal label {
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
-    color: var(--muted);
-    font-size: 0.68rem;
-    font-weight: 700;
-}
-
-.modal input,
-.modal select {
-    border: 1px solid var(--line);
-    border-radius: 9px;
-    padding: 11px 12px;
+.modal-title {
+    margin: 0 0 22px;
+    padding-right: 28px;
     color: var(--ink);
-    background: #fff;
-    font: inherit;
-    font-size: 0.78rem;
-    outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    font-size: 1.4rem;
+    font-weight: 700;
+    letter-spacing: -0.05em;
 }
 
-.modal input:focus,
-.modal select:focus {
-    border-color: #99b55f;
-    box-shadow: 0 0 0 3px rgba(153, 181, 95, 0.2);
+.type-toggle {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding: 4px;
+    margin-bottom: 20px;
+    border-radius: 12px;
+    background: var(--surface-3);
+}
+
+.type-toggle button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 40px;
+    border: 0;
+    border-radius: 9px;
+    color: var(--muted);
+    background: transparent;
+    font-size: 0.74rem;
+    font-weight: 700;
+    transition: background-color 0.25s, color 0.25s, box-shadow 0.25s;
+}
+
+.type-toggle button.is-income,
+.type-toggle button.is-expense {
+    color: var(--ink);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+}
+
+.type-toggle__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.type-toggle__dot--income { background: var(--tone-green-bar); }
+.type-toggle__dot--expense { background: #d5a078; }
+
+.form-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
 }
 
 .form-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 12px;
+    gap: 14px;
 }
 
-.type-toggle button { flex: 1; }
-.modal-submit { margin-top: 6px; padding: 13px; }
+.amount-input {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+}
+
+.save-error {
+    margin: 14px 0 0;
+}
+
+.submit {
+    margin-top: 22px;
+}
+
+.spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Responsivo */
+
+@media (max-width: 1200px) {
+    .summary-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
 
 @media (max-width: 1000px) {
-    .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .panels { grid-template-columns: 1fr; }
+    .panels {
+        grid-template-columns: 1fr;
+    }
 }
 
-@media (max-width: 760px) {
-    .finances-content { width: min(100% - 32px, 1220px); padding-top: 36px; }
-
-    .finances-heading,
-    .heading-actions {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: 14px;
+@media (max-width: 680px) {
+    .summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
     }
 
-    .finances-heading { margin-bottom: 27px; }
-}
+    .summary-card {
+        padding: 14px 13px;
+    }
 
-@media (max-width: 480px) {
-    .summary-grid { grid-template-columns: 1fr; }
-    .form-row { grid-template-columns: 1fr; }
-    .panel { padding: 20px 18px; }
+    .summary-card__top {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .panel {
+        padding: 20px 17px;
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+
+    .header-actions {
+        width: 100%;
+    }
+
+    .header-actions .segmented {
+        flex: 1;
+    }
+
+    .header-actions .segmented button {
+        flex: 1;
+    }
+
+    .header-actions .btn {
+        flex: 1;
+    }
 }
 </style>
