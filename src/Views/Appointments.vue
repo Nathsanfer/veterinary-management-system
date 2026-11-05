@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import TopBar from '../components/TopBar.vue'
 import { canCreateAppointment, canDeleteAppointment } from '../stores/auth'
 import { askConfirm } from '../stores/confirm'
+import { loadAll } from '../stores/clinic'
 import { supabase } from '../lib/supabase'
 import { notify } from '../stores/toast'
 
@@ -246,6 +247,7 @@ async function salvarAgendamento() {
     avisar(editandoId.value ? 'Agendamento atualizado com sucesso!' : 'Agendamento cadastrado com sucesso!')
     limparFormulario()
     await carregarDados()
+    loadAll()
   } catch (error) {
     console.error('Erro ao salvar agendamento:', error)
     avisar(`Não foi possível salvar. ${error.message || 'Verifique os dados e as permissões do banco.'}`, 'error')
@@ -307,6 +309,7 @@ async function excluirAgendamento(item) {
     atendimentos.value = atendimentos.value.filter((registro) => registro.id !== item.id)
     if (editandoId.value === item.id) limparFormulario()
     avisar('Atendimento excluído. Os dados do tutor e do pet foram mantidos.')
+    loadAll()
   } catch (error) {
     avisar(`Não foi possível excluir o atendimento: ${error.message}`, 'error')
   }
@@ -333,7 +336,10 @@ function limparFiltros() {
   filtroStatus.value = ''
 }
 
-onMounted(carregarDados)
+onMounted(() => {
+  carregarDados()
+  loadAll()
+})
 </script>
 
 <template>
