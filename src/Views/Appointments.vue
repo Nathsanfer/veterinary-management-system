@@ -10,6 +10,7 @@ import { notify } from '../stores/toast'
 const tutores = ref([])
 const pacientesDoTutor = ref([])
 const veterinarios = ref([])
+const servicosDisponiveis = ref([])
 const atendimentos = ref([])
 const carregando = ref(false)
 const salvando = ref(false)
@@ -20,17 +21,52 @@ const filtroTexto = ref('')
 const filtroData = ref('')
 const filtroStatus = ref('')
 
+const formatarMoeda = (valor) =>
+  Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
 const tutorVazio = () => ({ nome: '', cpf: '', telefone: '', email: '' })
 const pacienteVazio = () => ({
   nome: '', especie: '', raca: '', data_nascimento: '', sexo: '',
   peso_atual: '', castrado: false, alergias: ''
 })
 const atendimentoVazio = () => ({
-  data: '', horario: '', veterinario_id: '', status: 'Agendado', motivo_visita: ''
+  data: '', horario: '', veterinario_id: '', status: 'Agendado', motivo_visita: '',
+  servicos_ids: []
 })
 const formTutor = reactive(tutorVazio())
 const formPaciente = reactive(pacienteVazio())
 const formAtendimento = reactive(atendimentoVazio())
+const servicoSelecionadoTemp = ref('')
+
+const totalServicosSelecionados = computed(() => {
+  return servicosDisponiveis.value
+    .filter((s) => formAtendimento.servicos_ids.includes(s.id))
+    .reduce((total, s) => total + Number(s.valor_base || 0), 0)
+})
+
+const servicosDisponiveisNaoSelecionados = computed(() => {
+  return servicosDisponiveis.value.filter(
+    (s) => !formAtendimento.servicos_ids.includes(s.id)
+  )
+})
+
+const servicosSelecionadosObjetos = computed(() => {
+  return formAtendimento.servicos_ids
+    .map((id) => servicosDisponiveis.value.find((s) => s.id === id))
+    .filter(Boolean)
+})
+
+function adicionarServico() {
+  if (!servicoSelecionadoTemp.value) return
+  if (!formAtendimento.servicos_ids.includes(servicoSelecionadoTemp.value)) {
+    formAtendimento.servicos_ids.push(servicoSelecionadoTemp.value)
+  }
+  servicoSelecionadoTemp.value = ''
+}
+
+function removerServico(servicoId) {
+  formAtendimento.servicos_ids = formAtendimento.servicos_ids.filter((id) => id !== servicoId)
+}
 
 const statusOptions = ['Agendado', 'Em andamento', 'Concluído', 'Cancelado']
 
@@ -39,9 +75,13 @@ const atendimentosFiltrados = computed(() => {
   return atendimentos.value.filter((item) => {
     const tutor = item.paciente?.tutor?.nome || ''
     const pet = item.paciente?.nome || ''
+    const servicosNomes = (item.servicos_realizados || [])
+      .map((sr) => sr.servicos?.nome || '')
+      .join(' ')
     const correspondeTexto = !termo ||
       tutor.toLocaleLowerCase('pt-BR').includes(termo) ||
-      pet.toLocaleLowerCase('pt-BR').includes(termo)
+      pet.toLocaleLowerCase('pt-BR').includes(termo) ||
+      servicosNomes.toLocaleLowerCase('pt-BR').includes(termo)
     const dataItem = item.data_entrada ? item.data_entrada.slice(0, 10) : ''
     const correspondeData = !filtroData.value || dataItem === filtroData.value
     const correspondeStatus = !filtroStatus.value || item.status === filtroStatus.value
@@ -95,14 +135,17 @@ const statusClass = (status) =>
 async function carregarDados() {
   carregando.value = true
   try {
-    const [tutoresRes, vetsRes] = await Promise.all([
+    const [tutoresRes, vetsRes, servicosRes] = await Promise.all([
       supabase.from('tutores').select('*').order('nome'),
-      supabase.from('veterinarios').select('id, nome, crmv').eq('ativo', true).order('nome')
+      supabase.from('veterinarios').select('id, nome, crmv').eq('ativo', true).order('nome'),
+      supabase.from('servicos').select('id, nome, valor_base, cor, ativo').order('nome')
     ])
     if (tutoresRes.error) throw tutoresRes.error
     if (vetsRes.error) throw vetsRes.error
+    if (servicosRes.error) throw servicosRes.error
     tutores.value = tutoresRes.data || []
     veterinarios.value = vetsRes.data || []
+    servicosDisponiveis.value = (servicosRes.data || []).filter((s) => s.ativo !== false)
     await carregarAtendimentos()
   } catch (error) {
     console.error('Erro ao carregar dados:', error)
@@ -121,7 +164,11 @@ async function carregarAtendimentos() {
         id, tutor_id, nome, especie, raca, data_nascimento, sexo, peso_atual, castrado, alergias,
         tutor:tutores!pacientes_tutor_id_fkey (id, nome, cpf, telefone, email)
       ),
-      veterinario:veterinarios!atendimentos_veterinario_id_fkey (id, nome, crmv)
+      veterinario:veterinarios!atendimentos_veterinario_id_fkey (id, nome, crmv),
+      servicos_realizados (
+        id, servico_id, valor_unitario, valor_total,
+        servicos ( id, nome, cor, valor_base )
+      )
     `)
     .order('data_entrada', { ascending: false })
   if (error) throw error
@@ -228,21 +275,60 @@ async function salvarAgendamento() {
     avisar('Informe a data e o horário do agendamento.', 'error')
     return
   }
+  if (!formAtendimento.servicos_ids.length) {
+    avisar('Selecione pelo menos um serviço para o agendamento.', 'error')
+    return
+  }
   salvando.value = true
   try {
     const tutorId = await salvarTutor()
     const pacienteId = await salvarPaciente(tutorId)
+
+    // Compõe motivo da visita caso esteja em branco
+    const nomesServicos = servicosDisponiveis.value
+      .filter((s) => formAtendimento.servicos_ids.includes(s.id))
+      .map((s) => s.nome)
+      .join(', ')
+
+    const motivo = formAtendimento.motivo_visita?.trim() || nomesServicos || 'Atendimento veterinário'
+
     const dados = {
       paciente_id: pacienteId,
       veterinario_id: formAtendimento.veterinario_id || null,
       data_entrada: dataHoraLocal(formAtendimento.data, formAtendimento.horario),
       status: formAtendimento.status,
-      motivo_visita: formAtendimento.motivo_visita || null
+      motivo_visita: motivo
     }
-    const resultado = editandoId.value
-      ? await supabase.from('atendimentos').update(dados).eq('id', editandoId.value)
-      : await supabase.from('atendimentos').insert(dados)
-    if (resultado.error) throw resultado.error
+
+    let atendimentoId = editandoId.value
+    if (atendimentoId) {
+      const resultado = await supabase.from('atendimentos').update(dados).eq('id', atendimentoId)
+      if (resultado.error) throw resultado.error
+
+      // Atualiza serviços vinculados
+      await supabase.from('servicos_realizados').delete().eq('atendimento_id', atendimentoId)
+    } else {
+      const resultado = await supabase.from('atendimentos').insert(dados).select('id').single()
+      if (resultado.error) throw resultado.error
+      atendimentoId = resultado.data.id
+    }
+
+    // Insere os serviços selecionados na tabela servicos_realizados
+    if (formAtendimento.servicos_ids.length > 0) {
+      const registrosServicos = formAtendimento.servicos_ids.map((servicoId) => {
+        const servicoObj = servicosDisponiveis.value.find((s) => s.id === servicoId)
+        return {
+          atendimento_id: atendimentoId,
+          servico_id: servicoId,
+          quantidade: 1,
+          valor_unitario: Number(servicoObj?.valor_base ?? 0)
+        }
+      })
+      const { error: erroServicos } = await supabase.from('servicos_realizados').insert(registrosServicos)
+      if (erroServicos) {
+        console.warn('Erro ao salvar serviços do atendimento:', erroServicos)
+      }
+    }
 
     avisar(editandoId.value ? 'Agendamento atualizado com sucesso!' : 'Agendamento cadastrado com sucesso!')
     limparFormulario()
@@ -282,11 +368,26 @@ async function editarAgendamento(item) {
     const horario = new Intl.DateTimeFormat('pt-BR', {
       timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
     }).format(data)
+
+    let servicosIds = (item.servicos_realizados || [])
+      .map((sr) => sr.servico_id)
+      .filter(Boolean)
+
+    // Se o atendimento não tinha serviços explícitos no banco, tenta associar pelo motivo da visita
+    if (!servicosIds.length && item.motivo_visita) {
+      const correspondente = servicosDisponiveis.value.find(
+        (s) => s.nome.toLowerCase() === item.motivo_visita.trim().toLowerCase()
+      )
+      if (correspondente) servicosIds = [correspondente.id]
+    }
+
     Object.assign(formAtendimento, {
-      data: partes, horario,
+      data: partes,
+      horario,
       veterinario_id: item.veterinario_id || '',
       status: item.status || 'Agendado',
-      motivo_visita: item.motivo_visita || ''
+      motivo_visita: item.motivo_visita || '',
+      servicos_ids: servicosIds
     })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   } catch (error) {
@@ -304,6 +405,7 @@ async function excluirAgendamento(item) {
   })
   if (!confirmado) return
   try {
+    await supabase.from('servicos_realizados').delete().eq('atendimento_id', item.id)
     const { error } = await supabase.from('atendimentos').delete().eq('id', item.id)
     if (error) throw error
     atendimentos.value = atendimentos.value.filter((registro) => registro.id !== item.id)
@@ -319,6 +421,7 @@ function limparFormulario() {
   editandoId.value = null
   tutorSelecionadoId.value = ''
   pacienteSelecionadoId.value = ''
+  servicoSelecionadoTemp.value = ''
   pacientesDoTutor.value = []
   Object.assign(formTutor, tutorVazio())
   Object.assign(formPaciente, pacienteVazio())
@@ -510,6 +613,69 @@ onMounted(() => {
                 <option v-for="status in statusOptions" :key="status">{{ status }}</option>
               </select>
             </label>
+
+            <!-- Seleção de Serviços via Combobox -->
+            <div class="field field--full">
+              <div class="field-header-row">
+                <span>Serviços inclusos *</span>
+                <span v-if="formAtendimento.servicos_ids.length" class="services-total-badge">
+                  {{ formAtendimento.servicos_ids.length }} adicionado(s) · Total: {{ formatarMoeda(totalServicosSelecionados) }}
+                </span>
+              </div>
+              <p class="form-section__hint" style="margin-top: 0; margin-bottom: 8px;">
+                Selecione os serviços no seletor abaixo. A cada escolha, o serviço é adicionado automaticamente.
+              </p>
+
+              <div class="combobox-add-row">
+                <select
+                  v-model="servicoSelecionadoTemp"
+                  class="input"
+                  :disabled="!servicosDisponiveisNaoSelecionados.length && servicosDisponiveis.length > 0"
+                  @change="adicionarServico"
+                >
+                  <option value="" disabled selected>
+                    {{ !servicosDisponiveis.length
+                        ? 'Nenhum serviço cadastrado no catálogo'
+                        : !servicosDisponiveisNaoSelecionados.length
+                          ? 'Todos os serviços do catálogo já foram adicionados'
+                          : '+ Clique para selecionar e adicionar um serviço...' }}
+                  </option>
+                  <option
+                    v-for="s in servicosDisponiveisNaoSelecionados"
+                    :key="s.id"
+                    :value="s.id"
+                  >
+                    {{ s.nome }} — {{ formatarMoeda(s.valor_base) }}
+                  </option>
+                </select>
+              </div>
+
+              <!-- Lista de serviços já adicionados (removíveis) -->
+              <div v-if="servicosSelecionadosObjetos.length" class="selected-services-tags">
+                <div
+                  v-for="servico in servicosSelecionadosObjetos"
+                  :key="servico.id"
+                  class="selected-service-pill"
+                >
+                  <span class="selected-service-pill__icon" aria-hidden="true">✓</span>
+                  <span class="selected-service-pill__name">{{ servico.nome }}</span>
+                  <span class="selected-service-pill__price">{{ formatarMoeda(servico.valor_base) }}</span>
+                  <button
+                    type="button"
+                    class="selected-service-pill__remove"
+                    title="Remover serviço"
+                    aria-label="Remover serviço"
+                    @click="removerServico(servico.id)"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+              <div v-else class="empty-field-hint">
+                Nenhum serviço adicionado ainda. Escolha no campo acima para incluir neste atendimento.
+              </div>
+            </div>
+
             <label class="field field--full">
               Motivo da visita
               <textarea v-model.trim="formAtendimento.motivo_visita" class="input input--area" rows="2" placeholder="Ex.: consulta de rotina, vacinação, retorno..."></textarea>
@@ -580,6 +746,7 @@ onMounted(() => {
               <th>Data e horário</th>
               <th>Pet</th>
               <th>Tutor</th>
+              <th>Serviços</th>
               <th>Veterinário</th>
               <th>Status</th>
               <th v-if="canCreateAppointment" class="align-right">Ações</th>
@@ -601,6 +768,19 @@ onMounted(() => {
                 </div>
               </td>
               <td>{{ item.paciente?.tutor?.nome || 'Tutor não encontrado' }}</td>
+              <td>
+                <div v-if="item.servicos_realizados?.length" class="services-chips">
+                  <span
+                    v-for="sr in item.servicos_realizados"
+                    :key="sr.id"
+                    class="service-chip"
+                  >
+                    {{ sr.servicos?.nome || 'Serviço' }}
+                  </span>
+                </div>
+                <span v-else-if="item.motivo_visita" class="cell-sub">{{ item.motivo_visita }}</span>
+                <span v-else class="cell-sub">A definir</span>
+              </td>
               <td>
                 <span v-if="item.veterinario?.nome" class="person">
                   <span class="avatar avatar--sm" aria-hidden="true">{{ initials(item.veterinario.nome) }}</span>
@@ -769,6 +949,135 @@ onMounted(() => {
   padding: 12px 14px;
   resize: vertical;
   line-height: 1.5;
+}
+
+/* Seleção de Serviços */
+
+.field-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.services-total-badge {
+  text-transform: none;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: normal;
+  background: var(--accent-soft);
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.combobox-add-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.selected-services-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-soft, rgba(0, 0, 0, 0.02));
+  border: 1px solid var(--line);
+}
+
+.selected-service-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 12px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1.5px solid var(--line-strong);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s var(--ease);
+}
+
+.selected-service-pill:hover {
+  border-color: var(--accent);
+}
+
+.selected-service-pill__icon {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.selected-service-pill__name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.selected-service-pill__price {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+.selected-service-pill__remove {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--ink-2);
+  border-radius: 50%;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 2px;
+  transition: all 0.15s ease;
+}
+
+.selected-service-pill__remove:hover {
+  background: var(--line);
+  color: #e53e3e;
+  transform: scale(1.15);
+}
+
+.empty-field-hint {
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  padding: 12px;
+  background: var(--surface-soft, rgba(0, 0, 0, 0.02));
+  border-radius: 8px;
+  border: 1px dashed var(--line);
+}
+
+.services-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 260px;
+}
+
+.service-chip {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: var(--accent-soft);
+  color: var(--accent-soft-ink);
+  white-space: nowrap;
 }
 
 /* Checkbox customizado */
