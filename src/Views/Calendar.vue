@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import TopBar from '../components/TopBar.vue'
 import { canCreateAppointment } from '../stores/auth'
 import {
@@ -9,11 +9,16 @@ import {
   calendarEvents,
   catalogServices,
   completeAppointment,
+  loadAll,
   loadError,
   veterinarians
 } from '../stores/clinic'
 import { askConfirm } from '../stores/confirm'
 import { notify } from '../stores/toast'
+
+onMounted(() => {
+  loadAll()
+})
 
 /* ------------------------------ Utilidades ------------------------------ */
 
