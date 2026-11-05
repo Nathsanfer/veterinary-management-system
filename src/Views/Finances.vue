@@ -1,16 +1,21 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import TopBar from '../components/TopBar.vue'
 import { addDays } from '../components/dashboard/dashboardUtils'
 import {
     TODAY,
     addManualTransaction,
     forecastRevenue,
+    loadAll,
     loadError,
     markAsPaid,
     transactions
 } from '../stores/clinic'
 import { notify } from '../stores/toast'
+
+onMounted(() => {
+    loadAll()
+})
 
 const brl = (value) =>
     value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
