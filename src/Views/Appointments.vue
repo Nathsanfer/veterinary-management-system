@@ -356,9 +356,6 @@ onMounted(() => {
             : 'Consulte os atendimentos registrados na clínica.' }}
         </p>
       </div>
-      <button v-if="canCreateAppointment" class="btn btn--primary" type="button" @click="novoAgendamento">
-        <span aria-hidden="true">+</span> Novo agendamento
-      </button>
     </header>
 
     <!-- Formulário: somente administração e recepção cadastram -->
