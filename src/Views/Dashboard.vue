@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import TopBar from '../components/TopBar.vue'
 import DashboardAdmin from '../components/dashboard/DashboardAdmin.vue'
 import DashboardRecepcao from '../components/dashboard/DashboardRecepcao.vue'
@@ -7,7 +7,12 @@ import DashboardVeterinario from '../components/dashboard/DashboardVeterinario.v
 import '../components/dashboard/dashboard.css'
 import '../components/dashboard/dashboard-refinements.css'
 import { authReady, profile } from '../stores/auth'
-import { loadError, loading } from '../stores/clinic'
+import { loadAll, loadError, loading } from '../stores/clinic'
+
+// Recarrega os dados da clínica ao abrir o painel
+onMounted(() => {
+  loadAll()
+})
 
 // Cada cargo vê apenas o painel que lhe cabe
 const panels = {
