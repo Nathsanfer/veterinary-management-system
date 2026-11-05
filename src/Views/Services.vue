@@ -3,6 +3,7 @@ import { computed, ref, onMounted } from "vue";
 import TopBar from "../components/TopBar.vue";
 import { supabase } from "../lib/supabase";
 import { getServiceIcon, SERVICE_ICON_OPTIONS } from "../lib/serviceIcons";
+import { loadAll } from "../stores/clinic";
 import { notify } from "../stores/toast";
 
 const services = ref([]);
@@ -145,6 +146,7 @@ const salvarServico = async () => {
   serviceForm.value = blankService();
   saving.value = false;
   await carregarServicos();
+  loadAll();
 };
 
 const formatPrice = (value) =>
