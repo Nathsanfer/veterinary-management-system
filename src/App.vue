@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { watch } from 'vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
 import ToastStack from './components/ToastStack.vue'
@@ -16,11 +16,7 @@ watch(
 </script>
 
 <template>
-    <router-view v-slot="{ Component }">
-        <Transition name="page" mode="out-in">
-            <component :is="Component" />
-        </Transition>
-    </router-view>
+    <router-view />
     <ToastStack />
     <ConfirmDialog />
 </template>
