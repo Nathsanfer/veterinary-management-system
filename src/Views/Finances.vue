@@ -110,6 +110,19 @@ const blankForm = () => ({
 })
 const form = ref(blankForm())
 
+const categoryOptions = {
+    income: ['Consultas', 'Vacinação', 'Banho e tosa', 'Cirurgias', 'Exames', 'Hospedagem'],
+    expense: ['Insumos', 'Despesas fixas', 'Outras despesas']
+}
+const formCategories = computed(() => categoryOptions[form.value.type])
+
+function setType(type) {
+    form.value.type = type
+    if (!categoryOptions[type].includes(form.value.category)) {
+        form.value.category = categoryOptions[type][0]
+    }
+}
+
 const saving = ref(false)
 const saveError = ref('')
 
@@ -349,10 +362,10 @@ async function payTransaction(item) {
                 <h2 id="entry-title" class="modal-title">Adicionar lançamento</h2>
 
                 <div class="type-toggle" role="group" aria-label="Tipo de lançamento">
-                    <button type="button" :class="{ 'is-income': form.type === 'income', 'is-expense': form.type === 'expense' }" :aria-pressed="form.type === 'income'" @click="form.type = 'income'">
+                    <button type="button" :class="{ 'is-income': form.type === 'income' }" :aria-pressed="form.type === 'income'" @click="setType('income')">
                         <span class="type-toggle__dot type-toggle__dot--income"></span>Receita
                     </button>
-                    <button type="button" :class="{ 'is-income': form.type === 'income', 'is-expense': form.type === 'expense' }" :aria-pressed="form.type === 'expense'" @click="form.type = 'expense'">
+                    <button type="button" :class="{ 'is-expense': form.type === 'expense' }" :aria-pressed="form.type === 'expense'" @click="setType('expense')">
                         <span class="type-toggle__dot type-toggle__dot--expense"></span>Despesa
                     </button>
                 </div>
@@ -389,14 +402,7 @@ async function payTransaction(item) {
                         <label class="field">
                             Categoria
                             <select v-model="form.category" class="input">
-                                <option>Consultas</option>
-                                <option>Vacinação</option>
-                                <option>Banho e tosa</option>
-                                <option>Cirurgias</option>
-                                <option>Exames</option>
-                                <option>Hospedagem</option>
-                                <option>Insumos</option>
-                                <option>Despesas fixas</option>
+                                <option v-for="name in formCategories" :key="name">{{ name }}</option>
                             </select>
                         </label>
                         <label class="field">
